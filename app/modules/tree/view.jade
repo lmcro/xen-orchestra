@@ -120,35 +120,31 @@
 div(style="margin-top: 57px; visibility: hidden; height: 0") .
 
 //- If we haven't any data
-div(ng-if="!pools.size")
-  .grid
-    .panel.panel-default.text-center
-      h1 Welcome on Xen Orchestra!
-      h3 It seems you aren't connected to any Xen server:
-      br
-      a.btn.btn-success.big(ui-sref="settings.index")
-        i.fa.fa-plus-circle
-        |  Add server
-      br
-      br
-      br
-      p You can add a new host anytime by clicking on the menu icon "
-          i.fa.fa-th
-          | " and choose "
-          i.fa.fa-cog
-          |  Settings"
-      p Enjoy Xen Orchestra!
+.panel.panel-default.text-center(ng-if="!pools.size")
+  h1 Welcome on Xen Orchestra!
+  h3 It seems you aren't connected to any Xen server:
+  br
+  a.btn.btn-success.big(ui-sref="settings.index")
+    i.fa.fa-plus-circle
+    |  Add server
+  br
+  br
+  br
+  p You can add a new host anytime by clicking on the menu icon "
+      i.fa.fa-th
+      | " and choose "
+      i.fa.fa-cog
+      |  Settings"
+  p Enjoy Xen Orchestra!
 //- If we have data
-div(ng-if="pools.size")
+.container-fluid(ng-if="pools.size")
   //- Contains a pool and all its children (hosts).
-  .grid.pool-block(
-    ng-repeat="pool in pools.all | map | orderBy:[natural('name_label'), 'id'] track by pool.id"
-  )
+  .grid.pool-block(ng-repeat="pool in pools.all | map | orderBy:[natural('name_label'), 'id'] track by pool.id")
     //- Pseudo pool if it is not a named pool.
-    //- .grid-cell.grid--gutters.pool-cell(ng-if="!pool.name_label")
+    //- .grid-cell.pool-cell(ng-if="!pool.name_label")
     //-   p.center(style="margin-top: 2em;") No pool connected
     //- Contains information about the pool if it is a named pool.
-    .grid-cell.grid--gutters.pool-cell.hidden-xs
+    .grid-cell.pool-cell.hidden-xs
       //- Header (name + dropdown menu).
       .dropdown.dropdown-pool(dropdown)
         a.pool-name(ui-sref="pools_view({id: pool.id})")
@@ -169,8 +165,8 @@ div(ng-if="pools.size")
             a(xo-sref="VMs_new({container: pool.id})")
               i.xo-icon-vm.fa-fw
               |  Create VM
-          //- TODO: solve the "a" problem for ng-file-select
-          li(ng-file-select="patchPool($files, pool.id)")
+          //- TODO: solve the "a" problem for ngf-select
+          li(ngf-select="patchPool($files, pool.id)")
             a
               i.fa.fa-file-code-o.fa-fw
               |  Patch
@@ -209,14 +205,14 @@ div(ng-if="pools.size")
                 i.xo-icon-sr
                 |  {{SR.name_label}}
               td.col-md-6.right.no-border
-                .progress.progress-small(tooltip="Disk: {{[SR.usage, SR.size] | percentage}} allocated")
-                  .progress-bar(role="progressbar", aria-valuenow="{{100*SR.usage/SR.size}}", aria-valuemin="0", aria-valuemax="100", style="width: {{[SR.usage, SR.size] | percentage}}")
+                .progress.progress-small(tooltip="Disk: {{SR.physical_usage | bytesToSize}}/{{SR.size | bytesToSize}} ({{[SR.physical_usage, SR.size] | percentage}})")
+                  .progress-bar(role="progressbar", aria-valuenow="{{100*SR.physical_usage/SR.size}}", aria-valuemin="0", aria-valuemax="100", style="width: {{[SR.physical_usage, SR.size] | percentage}}")
     //- Contains all the hosts of this pool.
     .grid-cell.grid--gutters.hosts-vms-cells
       //- Contains a host and all its children (VMs).
       .grid(ng-repeat="host in hostsByPool[pool.id] | map | orderBy:natural('name_label') track by host.id")
         //- Contains information about the host.
-        .grid-cell.grid--gutters.host-cell
+        .grid-cell.host-cell
           //- Header (name + dropdown menu).
           .dropdown.dropdown-pool(dropdown)
             a.host-name(ui-sref="hosts_view({id: host.id})")
@@ -233,8 +229,8 @@ div(ng-if="pools.size")
                 a(xo-sref="VMs_new({container: host.id})")
                   i.xo-icon-vm.fa-fw
                   |  Create VM
-              //- TODO: solve the "a" problem for ng-file-select
-              li(ng-file-select="importVm($files, host.id)")
+              //- TODO: solve the "a" problem for ngf-select
+              li(ngf-select="importVm($files, host.id)")
                 a
                   i.fa.fa-upload.fa-fw
                   |  Import VM
@@ -267,18 +263,13 @@ div(ng-if="pools.size")
                 a(xo-click="restartToolStack(host.id)")
                   i.fa.fa-retweet.fa-fw
                   |  Restart toolstack
-              li(ng-if="pool.name_label")
-                a(xo-click="pool_removeHost(host.id)")
-                  i.fa.fa-cloud-upload.fa-fw
-                  |  Remove from pool
-              li(ng-if="!pool.name_label")
-                a(xo-click="pool_addHost(host.id)")
-                  i.fa.fa-cloud-download.fa-fw
-                  |  Add to pool
           //- /Header.
           //- Stats.
           ul.list-unstyled.stats
             //- Warning icon if host is halted or disabled
+            li.text-warning(ng-if="host.power_state === 'Unknown'")
+              i.fa.fa-warning
+              |  Unknown
             li.text-danger(ng-if="host.power_state === 'Halted'")
               i.fa.fa-warning
               |  Halted
@@ -288,14 +279,14 @@ div(ng-if="pools.size")
             //- Memory
             li(ng-if="host.power_state === 'Running' && host.enabled")
               i.xo-icon-memory.i-progress
-              .progress.progress-small(tooltip="RAM: {{[host.memory.usage, host.memory.size] | percentage}} allocated")
+              .progress.progress-small(tooltip="RAM: {{host.memory.usage | bytesToSize}}/{{host.memory.size | bytesToSize}} ({{[host.memory.usage, host.memory.size] | percentage}})")
                 .progress-bar(role="progressbar", aria-valuenow="{{100*host.memory.usage/host.memory.size}}", aria-valuemin="0", aria-valuemax="100", style="width: {{[host.memory.usage, host.memory.size] | percentage}}")
             //- Host address
             li.text-muted.substats
               i.xo-icon-network
               |  {{host.address}}
         //- Contains all the VMs of this host.
-        .grid-cell.grid--gutters.vm-cell(droppable = 'true', host = '{{ host.id }}')
+        .grid-cell.vm-cell(droppable = 'true', host = '{{ host.id }}')
           //- If no VMs, fill the space with a message.
           .vms-notice(ng-if="vmsByContainer[host.id] | isEmpty")
             //-  | Host halted.
@@ -322,22 +313,22 @@ div(ng-if="pools.size")
                   i.xo-icon-working(ng-if="isVMWorking(VM)", tooltip="{{VM.power_state}} and {{(VM.current_operations | map)[0]}}")
                   i(class="xo-icon-{{VM.power_state | lowercase}}",ng-if="!isVMWorking(VM)", tooltip="{{VM.power_state}}")
                 //- VM name.
-                td.vm-name.col-xs-8.col-sm-2.col-md-2
+                td.vm-name.col-xs-8.col-sm-3.col-md-3
                   p.vm {{VM.name_label}}
                 //- Quick actions.
-                td.vm-quick-buttons.col-md-2.hidden-xs
+                td.vm-quick-buttons.col-md-1.col-sm-1.hidden-xs
                   .quick-buttons
-                    a(tooltip="Shutdown VM", xo-click="stopVM(VM.id)")
+                    a(ng-if="VM.power_state == ('Running' || 'Paused')", tooltip="Shutdown VM", xo-click="confirmAction('stopVM', VM.id)")
                       i.fa.fa-stop
-                    a(tooltip="Start VM", xo-click="startVM(VM.id)")
+                    a(ng-if="VM.power_state == ('Halted')", tooltip="Start VM", xo-click="startVM(VM.id)")
                       i.fa.fa-play
-                    a(tooltip="Reboot VM", xo-click="rebootVM(VM.id)")
+                    a(ng-if="VM.power_state == ('Running' || 'Paused')", tooltip="Reboot VM", xo-click="confirmAction('rebootVM', VM.id)")
                       i.fa.fa-refresh
                     a(tooltip="VM Console", xo-sref="consoles_view({id: VM.id})")
                       i.xo-icon-console
                 //- Description.
                 td.vm-description.col-md-4.hidden-xs
-                  i(class="xo-icon-{{VM.os_version.distro | osFamily}}",ng-if="VM.os_version.distro", tooltip="{{VM.os_version.name}}")
+                  i(class="icon-{{VM.os_version.distro | osFamily}}",ng-if="VM.os_version.distro", tooltip="{{VM.os_version.name}}")
                     | &nbsp;
                   i.fa.fa-fw(ng-if="!VM.os_version.distro")
                   | {{VM.name_description}}
@@ -345,10 +336,16 @@ div(ng-if="pools.size")
                 //- Memory
                 td.vm-memory-stat.col-md-2.hidden-xs
                   .cpu
-                    | {{VM.memory.size | bytesToSize}}
+                    span.text-muted
+                      span(tooltip = "{{VM.CPUs.number}} vCPUs ({{VM.CPUs.max}} max)")
+                        | {{VM.CPUs.number}}x&nbsp;
+                        i.xo-icon-cpu
+                      |  {{VM.memory.size | bytesToSize}}
                   i.xo-icon-docker.fa-fw(ng-if="VM.docker", tooltip="Docker enabled")
-                  i.fa.fa-fw(ng-if="VM.PV_drivers && !VM.docker")
-                  i.xo-icon-info.fa-fw(ng-if="!VM.PV_drivers", tooltip="Xen tools not installed")
+                  i.fa.fa-fw(ng-if="VM.xenTools === 'up to date' && !VM.docker")
+                  i.xo-icon-warning.fa-fw(ng-if="VM.xenTools === 'out of date'", tooltip="Xen tools outdated")
+                  i.xo-icon-info.fa-fw(ng-if="VM.xenTools === false", tooltip="Xen tools not installed")
+                  i.xo-icon-other.fa-fw(ng-if="VM.xenTools === undefined", tooltip="Unknown")
                 //- /Metrics.
                 //- Address.
                 td.text-muted.text-right.col-md-2.hidden-xs
@@ -358,7 +355,7 @@ div(ng-if="pools.size")
         //- This is where the information about a host would be displayed.
         .grid-cell.host-cell
         //- Contains all the VMs of this pool.
-        .grid.grid-cell.vm-cell
+        .grid-cell.vm-cell
           //- TODO: comment
           .table-responsive
             table.table.table-hover.table-condensed
@@ -374,24 +371,24 @@ div(ng-if="pools.size")
                   i.xo-icon-working(ng-if="isVMWorking(VM)", tooltip="{{VM.power_state}} and {{(VM.current_operations | map)[0]}}")
                   i(class="xo-icon-{{VM.power_state | lowercase}}",ng-if="!isVMWorking(VM)", tooltip="{{VM.power_state}}")
                 //- VM name.
-                td.vm-name.col-xs-8.col-sm-2.col-md-2
+                td.vm-name.col-xs-8.col-sm-3.col-md-3
                   p.vm {{VM.name_label}}
                 //- Quick actions.
-                td.vm-quick-buttons.col-md-2.hidden-xs
+                td.vm-quick-buttons.col-md-1.hidden-xs
                   .quick-buttons
-                    a(tooltip="Shutdown VM", xo-click="stopVM(VM.id)")
+                    a(ng-if="VM.power_state == ('Running' || 'Paused')", tooltip="Shutdown VM", xo-click="stopVM(VM.id)")
                       i.fa.fa-stop
                     a(ng-if="VM.power_state == 'Suspended'", tooltip="Resume VM", xo-click="resumeVM(VM.id)")
                       i.fa.fa-play
                     a(ng-if="VM.power_state != 'Suspended'", tooltip="Start VM", xo-click="startVM(VM.id)")
                       i.fa.fa-play
-                    a(tooltip="Reboot VM", xo-click="rebootVM(VM.id)")
+                    a(ng-if="VM.power_state == ('Running' || 'Paused')", tooltip="Reboot VM", xo-click="rebootVM(VM.id)")
                       i.fa.fa-refresh
-                    a(tooltip="VM Console")
+                    a(tooltip="VM Console", xo-sref="consoles_view({id: VM.id})")
                       i.xo-icon-console
                 //- Description.
                 td.vm-description.col-md-4.hidden-xs
-                  i(class="xo-icon-{{VM.os_version.distro | osFamily}}",ng-if="VM.os_version.distro", tooltip="{{VM.os_version.name}}")
+                  i(class="icon-{{VM.os_version.distro | osFamily}}",ng-if="VM.os_version.distro", tooltip="{{VM.os_version.name}}")
                     | &nbsp;
                   i.fa.fa-fw(ng-if="!VM.os_version.distro")
                   | {{VM.name_description}}
@@ -399,10 +396,16 @@ div(ng-if="pools.size")
                 //- Memory
                 td.vm-memory-stat.col-md-2.hidden-xs
                   .cpu
-                    | {{VM.memory.size | bytesToSize}}
+                    span.text-muted
+                      span(tooltip = "{{VM.CPUs.number}} vCPUs ({{VM.CPUs.max}} max)")
+                        | {{VM.CPUs.number}}x&nbsp;
+                        i.xo-icon-cpu
+                      |  {{VM.memory.size | bytesToSize}}
                   i.xo-icon-docker.fa-fw(ng-if="VM.docker", tooltip="Docker enabled")
-                  i.fa.fa-fw(ng-if="VM.PV_drivers && !VM.docker")
-                  i.xo-icon-info.fa-fw(ng-if="!VM.PV_drivers", tooltip="Xen tools not installed")
+                  i.fa.fa-fw(ng-if="VM.xenTools === 'up to date' && !VM.docker")
+                  i.xo-icon-warning.fa-fw(ng-if="VM.xenTools === 'out of date'", tooltip="Xen tools outdated")
+                  i.xo-icon-info.fa-fw(ng-if="VM.xenTools === false", tooltip="Xen tools not installed")
+                  i.xo-icon-other.fa-fw(ng-if="VM.xenTools === undefined", tooltip="Unknown")
                 //- /Metrics.
                 //- Address.
                 td.text-muted.text-right.col-md-2.hidden-xs

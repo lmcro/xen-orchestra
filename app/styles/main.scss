@@ -21,26 +21,36 @@ $fa-font-path: "../";
 // Angular Charts.
 //////////////////////////////////////////////////////////////////////
 
-@import "../../dist/bower_components/angular-chart.js/dist/angular-chart";
+@import "../../node_modules/angular-chart.js/dist/angular-chart";
 
 //////////////////////////////////////////////////////////////////////
 // Angular xEditable.
 //////////////////////////////////////////////////////////////////////
 
-@import "../../dist/bower_components/angular-xeditable/dist/css/xeditable";
+@import "../../node_modules/angular-xeditable-npm/dist/css/xeditable";
 
 //////////////////////////////////////////////////////////////////////
 // Angular Notify Toaster.
 //////////////////////////////////////////////////////////////////////
 
-@import "../../dist/bower_components/angular-notify-toaster/toaster";
+@import "../../node_modules/angularjs-toaster/toaster.scss";
 
 //////////////////////////////////////////////////////////////////////
 // UI Select.
 //////////////////////////////////////////////////////////////////////
 
-@import "../../dist/bower_components/angular-ui-select/dist/select";
+@import "../../node_modules/ui-select/dist/select";
 
+//////////////////////////////////////////////////////////////////////
+// Fonts MFizz (Linux icons...)
+//////////////////////////////////////////////////////////////////////
+
+@import "../../font-mfizz-2.0/font-mfizz";
+
+//////////////////////////////////////////////////////////////////////
+
+//////////////////////////////////////////////////////////////////////
+// Misc
 //////////////////////////////////////////////////////////////////////
 
 // Style applied to a message for outdated browsers (IE <= 7).
@@ -49,6 +59,14 @@ $fa-font-path: "../";
   background: #cccccc;
   color: black;
   padding: 0.2em 0;
+}
+
+// To avoid strange checkbox behaviours on small devices with bootstrap
+@media (max-width: 767px) {
+.checkbox input[type="checkbox"] {
+    position: relative !important;
+    margin-left: 0px;
+  }
 }
 
 // Some links are used throught JavaScript and therefore does not have
@@ -75,6 +93,45 @@ html, body, .view-main {
 // Force our content to be under the fixed navbar.
 .view-main {
   padding-top: 50px;
+}
+
+.grid-xs, .grid {
+  display: flex;
+}
+
+@media (min-width: 768px) {
+  .grid-sm {
+    display: flex;
+  }
+}
+
+@media (min-width: 992px) {
+  .grid-md {
+    display: flex;
+  }
+}
+
+@media (min-width: 1200px) {
+  .grid-lg {
+    display: flex;
+  }
+}
+
+/* With gutters */
+.grid--gutters {
+}
+
+.grid--gutters > .grid-cell {
+  padding-left: 0.1em;
+  padding-bottom: 0.1em;
+}
+
+.grid-cell {
+  flex: 1;
+}
+
+.bg-muted {
+  background-color: $gray-lighter;
 }
 
 //////////////////////////////////////////////////////////////////////
@@ -121,14 +178,6 @@ html, body, .view-main {
   background-color: #ddd;
 }
 
-.xo-drop-target td, .xo-drop-target .grid-cell, .xo-drop-target.grid-cell {
-  // @extend .bg-success;
-}
-
-.xo-drop-legit td, .xo-drop-legit .grid-cell, .xo-drop-legit.grid-cell {
-  // @extend .bg-warning;
-}
-
 .xo-drop-legit.vm-cell, .xo-drop-target.vm-cell {
   outline-style: dashed;
   outline-width: medium;
@@ -138,6 +187,14 @@ html, body, .view-main {
 //////////////////////////////////////////////////////////////////////
 // XO icons
 //////////////////////////////////////////////////////////////////////
+
+////
+// Panel titles
+////
+
+.panel-title > i {
+  color: #e25440 !important;
+}
 
 ////
 // Alerts
@@ -164,6 +221,12 @@ html, body, .view-main {
 .xo-icon-error {
   @extend .fa;
   @extend .fa-exclamation-circle;
+  @extend .text-danger;
+}
+
+.xo-icon-failure {
+  @extend .fa;
+  @extend .fa-times-circle;
   @extend .text-danger;
 }
 
@@ -217,6 +280,11 @@ html, body, .view-main {
   @extend .fa-hdd-o;
 }
 
+.xo-icon-disk {
+  @extend .fa;
+  @extend .fa-hdd-o;
+}
+
 .xo-icon-snapshot {
   @extend .fa;
   @extend .fa-camera;
@@ -238,7 +306,13 @@ html, body, .view-main {
 }
 
 .xo-icon-group {
+  @extend .fa;
   @extend .fa-users;
+}
+
+.xo-icon-plugin {
+  @extend .fa;
+  @extend .fa-puzzle-piece;
 }
 
 ////
@@ -301,23 +375,36 @@ html, body, .view-main {
   @extend .text-danger;
 }
 
+.xo-icon-loading {
+  @extend .fa;
+  @extend .fa-circle-o-notch;
+  @extend .fa-spin;
+  @extend .fa-2x;
+}
+
+.xo-icon-loading-sm {
+  @extend .fa;
+  @extend .fa-circle-o-notch;
+  @extend .fa-spin;
+}
+
 ////
 // Guest OS
 ////
 
-.xo-icon-linux {
+.icon-linux {
   @extend .fa;
   @extend .fa-linux;
   color: #666666;
 }
 
-.xo-icon-windows {
+.icon-windows {
   @extend .fa;
   @extend .fa-windows;
   color: #666666;
 }
 
-.xo-icon-other {
+.icon-other {
   @extend .fa;
   @extend .fa-question-circle;
   color: #666666;
@@ -356,6 +443,18 @@ html, body, .view-main {
 .login-form-dark {
   @extend .login-form;
   background-color: #2e3133;
+}
+
+// transparent background for dropdown buttons
+.filter {
+  background-color: rgba(0, 0, 0, 0);
+  border: 0;
+  color: #9d9d9d;
+  box-shadow: none !important;
+  &:hover {
+    background-color: rgba(0, 0, 0, 0) !important;
+    color: white !important;
+  }
 }
 
 //////////////////////////////////////////////////////////////////////
@@ -441,14 +540,21 @@ div.host-cell:hover .substats {
   font-weight: bold;
 }
 
-// Prevents a host name from overflowing outside its box.
+.tree-panel {
+  background-color: white;
+  margin-bottom: 0.5em;
+  margin-right: 0.5em;
+  border-radius: 3px;
+}
+
 .host-cell, .pool-cell, .vm-cell {
-  @extend .panel;
+  @extend .tree-panel;
   & div {
     position: relative;
   }
 }
 
+// Prevents a host name from overflowing outside its box.
 .host-name, .pool-name, .sr-name {
   display: inline-block;
   white-space: nowrap;
@@ -460,38 +566,44 @@ div.host-cell:hover .substats {
 // Pool block
 // A block display a whole pool
 .pool-block {
-  margin-right: 0.8em;
-  margin-bottom: 0;
+  margin-right: -1.1em;
+  margin-left: -0.9em;
 }
 
 .pool-cell {
-  // margin-bottom: 0.5em;
-  // margin-left: 2em;
-  // margin-right: 1em;
   min-height: 6em;
+  flex: 1 1 20% !important;
   max-width: 190px;
-  background-color: white;
 }
 
 /* row for all hosts/vms in a pool */
 .hosts-vms-cells {
+  flex: 1 1 80% !important;
   min-height: 6em;
-  margin-right: -0.8em;
 }
 
-/* individual host element */
-.host-cell {
-  max-width: 156px;
-  background-color: white;
-  margin-bottom: 0.5em;
+@media (max-width: 767px) {
+  /* individual host element */
+  .host-cell {
+    flex: 1 1 40% !important;
+    max-width: 156px;
+  }
+
+  .vm-cell {
+    flex: 1 1 60% !important;
+  }
 }
 
-/* With gutters */
-.grid--gutters {
-  // margin-left: -0.5em;
-}
-.grid--gutters > .grid-cell {
-  padding-left: 0.1em;
+@media (min-width: 768px) {
+  /* individual host element */
+  .host-cell {
+    flex: 1 1 20% !important;
+    max-width: 156px;
+  }
+
+  .vm-cell {
+    flex: 1 1 80% !important;
+  }
 }
 
 /* vm name in table */
@@ -545,11 +657,6 @@ div.host-cell:hover .substats {
 // Hover color for progress bar
 .progress-bar:hover {
   background-color: #e25440;
-}
-
-
-.grid {
-  display: flex;
 }
 
 .stat-simple {
@@ -613,11 +720,16 @@ div.host-cell:hover .substats {
 // Flat view
 //////////////////////////////////////////////////////////////////////
 
-.flat-object { @extend .panel; margin: 0.5em;}
+@media (min-width: 768px) {
+  .flat-cell-name {min-width: 7.8%; max-width: 7.8%;}
+  .flat-cell-description {min-width: 13%; max-width: 13%}
+}
+
+.flat-object {@extend .panel;}
 .flat-object:hover {background-color: #f8f8f8;}
-.flat-cell {border-radius: 0px; margin-left: 1em; margin-right: 1em; margin-top: 0.5em; margin-bottom: 0.5em;}
-.flat-cell-name {max-width: 150px; min-width: 150px; font-weight: bold;}
-.flat-cell-description {max-width: 250px; min-width: 250px;}
+.flat-cell {margin-left: 1em; margin-right: 1em; margin-top: 0.5em; margin-bottom: 0.5em;}
+.flat-cell-name {font-weight: bold;}
+.flat-cell-description {}
 .flat-cell-type {max-width: 40px; font-size: 2em; text-align: center; margin: auto; margin-left: 0.5em;}
 .flat-cell-tag {font-size: 11pt; margin: auto; min-height: 2.5em; padding-top: 0.4em; padding-left: 1em; opacity: 0.8;}
 
@@ -628,11 +740,16 @@ div.host-cell:hover .substats {
 .row-login {
   @extend .panel;
   background: #fff;
+  margin-top: 4em;
   //padding: 20px 50px 20px 50px;
   padding: 1em 5em 1em 5em;
   max-width: 35em;
   margin-left: auto;
   margin-right: auto;
+}
+
+@media (max-width: 768px) {
+  .row-login {margin-top: 0.5em; padding: 0em 1em 0em 1em;}
 }
 
 img.navbar-logo {
@@ -647,16 +764,21 @@ img.navbar-logo {
 }
 
 //////////////////////////////////////////////////////////////////////
-// Settings
+// Side Menus
 //////////////////////////////////////////////////////////////////////
 
-.settings-menu {
-  background-color: #242628;
-  border-right: 1px solid #eee;
-  width: 212px;
+.menu-grid {
+  display: flex;
+  min-height: 100%
 }
 
-.settings-menu li a {
+.side-menu {
+  background-color: #242628;
+  border-right: 1px solid #eee;
+  flex: 1 0 content;
+}
+
+.side-menu li a {
   font-size: 1em;
   padding-left: 2em;
   display: block;
@@ -664,26 +786,26 @@ img.navbar-logo {
   &:hover, &:focus {
     background-color: #2e3133;
   }
+  white-space: nowrap;
 }
 
 // smaller settings menu on smaller screen
-@media (max-width: 970px) {
-  .settings-menu {
+@media (max-width: 992px) {
+  .side-menu {
     // 2em of padding + 2.29em of fa-fw
     width: 3.29em;
   }
-  .settings-menu li a {
+  .side-menu li a {
     padding-left: 1em;
     padding-right: 1em;
   }
   .menu-entry {
-    display: none;
+    display: none
   }
 }
 
-
-.settings-content {
-  flex: 1;
+.side-content {
+  flex: 1 1 1em;
 }
 
 .fa-menu {
@@ -698,4 +820,81 @@ img.navbar-logo {
 .oneliner {
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+//////////////////////////////////////////////////////////////////////
+// Tag directive view
+//////////////////////////////////////////////////////////////////////
+
+.tag-zone {
+  display: inline-block;
+}
+
+.tag-zone .label {
+  display: inline-block;
+}
+
+.tag-zone form {
+  display: inline-block;
+}
+
+.tag-zone .add-button {
+  display: none;
+}
+
+.tag-zone .edit {
+  display: inline;
+}
+
+.tag-zone:hover .add-button {
+  display: inline;
+}
+
+tr:hover .tag-zone .add-button {
+  display: inline;
+}
+
+dd:hover .tag-zone .add-button {
+  display: inline;
+}
+
+.flat-cell-tag:hover .tag-zone .add-button {
+  display: inline;
+}
+
+
+//////////////////////////////////////////////////////////////////////
+// Dataviz > chart selector
+//////////////////////////////////////////////////////////////////////
+.chart-selector{
+  position:relative;
+  height:120px;
+  display:inline-block;
+  margin:1em;
+  cursor: pointer;
+}
+
+.chart-selector > div {
+  position:absolute;
+  top:0;
+  background-color: rgba(255,255,255,0.85);
+  border: 1px solid #ddd;
+  width:100%;
+  font-size:1.5em;
+}
+
+.chart-selector.selected img{
+  border-width: 3px;
+}
+.chart-selector.selected > div{
+  background-color: rgba(51,51,51,0.85);
+  color:white;
+}
+.chart-selector:hover > div{
+  background-color: rgba(255,255,255,1);
+}
+
+.chart-selector.selected:hover  > div{
+  background-color: rgba(51,51,51,1);
+  color:white;
 }

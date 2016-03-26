@@ -1,14 +1,15 @@
 angular = require 'angular'
 forEach = require('lodash.foreach')
 includes = require('lodash.includes')
+Clipboard = require('clipboard')
 
-isoDevice = require('../iso-device')
+isoDevice = require('iso-device').default
 
 #=====================================================================
 
 module.exports = angular.module 'xoWebApp.console', [
   require 'angular-ui-router'
-  require 'angular-no-vnc'
+  require('angular-no-vnc').default
 
   isoDevice
 ]
@@ -17,7 +18,7 @@ module.exports = angular.module 'xoWebApp.console', [
       url: '/consoles/:id'
       controller: 'ConsoleCtrl'
       template: require './view'
-  .controller 'ConsoleCtrl', ($scope, $stateParams, xoApi, xo, xoHideUnauthorizedFilter) ->
+  .controller 'ConsoleCtrl', ($scope, $stateParams, xoApi, xo, xoHideUnauthorizedFilter, modal) ->
     {id} = $stateParams
     {get} = xoApi
 
@@ -71,13 +72,48 @@ module.exports = angular.module 'xoWebApp.console', [
     )
 
     $scope.startVM = xo.vm.start
-    $scope.stopVM = xo.vm.stop
-    $scope.rebootVM = xo.vm.restart
+    $scope.stopVM = (id) ->
+      modal.confirm
+        title: 'VM shutdown'
+        message: 'Are you sure you want to shutdown this VM ?'
+      .then ->
+        xo.vm.stop id
+    $scope.rebootVM = (id) ->
+      modal.confirm
+        title: 'VM reboot'
+        message: 'Are you sure you want to reboot this VM ?'
+      .then ->
+        xo.vm.restart id
 
     $scope.eject = ->
       xo.vm.ejectCd id
     $scope.insert = (disc_id) ->
       xo.vm.insertCd id, disc_id, true
+
+    $scope.vmClipboard = ''
+    $scope.setClipboard = (text) ->
+      $scope.vmClipboard = text
+      $scope.$applyAsync()
+
+    $scope.shutdownHost = (id) ->
+      modal.confirm({
+        title: 'Shutdown host'
+        message: 'Are you sure you want to shutdown this host?'
+      }).then ->
+        xo.host.stop id
+
+    $scope.rebootHost = (id) ->
+      modal.confirm({
+        title: 'Reboot host'
+        message: 'Are you sure you want to reboot this host? It will be disabled then rebooted'
+      }).then ->
+        xo.host.restart id
+
+    $scope.startHost = (id) ->
+      xo.host.start id
+
+    clipboard = new Clipboard('.copy')
+    clipboard.on('error', (e) -> console.log('Clipboard', e))
 
   # A module exports its name.
   .name

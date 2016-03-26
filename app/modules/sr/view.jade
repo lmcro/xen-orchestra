@@ -6,10 +6,12 @@
 .grid
   .panel.panel-default
     .panel-heading.panel-title
-      i.fa.fa-cogs(style="color: #e25440;")
+      i.fa.fa-cogs
       |  General
-      span.quick-edit(tooltip="Edit General settings", ng-click="srSettings.$show()")
+      span.quick-edit(tooltip="Edit General settings", ng-click="srSettings.$show()", ng-if = '!srSettings.$visible')
         i.fa.fa-edit.fa-fw
+      span.quick-edit(tooltip="Cancel Edit", ng-click="srSettings.$cancel()", ng-if = 'srSettings.$visible')
+        i.fa.fa-undo.fa-fw
     .panel-body
       form(editable-form="", name="srSettings", onbeforesave="saveSR($data)")
         dl.dl-horizontal
@@ -24,11 +26,8 @@
           dt Content type:
           dd {{SR.SR_type}}
           dt Tags
-          dd(ng-if="SR.tags.length")
-            span(ng-repeat="tag in SR.tags")
-              span.label.label-primary {{tag}}
-          dd(ng-if="!SR.tags.length")
-            em No tags.
+          dd
+            xo-tag(ng-if = 'SR', object = 'SR')
           dt Shared
           div(ng-repeat="container in [SR.$container] | resolve")
             dd(ng-if="'pool' === container.type")
@@ -51,86 +50,104 @@
               | Save
   .panel.panel-default
     .panel-heading.panel-title
-      i.xo-icon-stats(style="color: #e25440;")
+      i.xo-icon-stats
       |  Stats
     .panel-body
       .row
-        .col-sm-6.col-lg-4
-          p.stat-name Physical Alloc:
+        .col-sm-6
+          p.stat-name Physical usage:
           canvas.stat-simple(id="doughnut", class="chart chart-doughnut", data="[(SR.physical_usage), (SR.size - SR.physical_usage)]", labels="['Used', 'Free']", options='{tooltipTemplate: "<%if (label){%><%=label%>: <%}%><%= bytesToSize(value) %>"}')
-        .col-sm-6.col-lg-4
-          p.stat-name Virtual Alloc:
-          canvas.stat-simple(id="doughnut", class="chart chart-doughnut", data="[(SR.usage), (SR.size - SR.usage)]", labels="['Used', 'Free']", options='{tooltipTemplate: "<%if (label){%><%=label%>: <%}%><%= bytesToSize(value) %>"}')
-        .col-sm-4.visible-lg
+        .col-sm-6
           p.stat-name VDIs:
           p.center.big-stat {{SR.VDIs.length}}
-      .row.hidden-lg
-        .col-sm-12
-          br
-          p.stat-name {{SR.VDIs.length}} VDIs
 //- Action panel
 .grid
   .panel.panel-default
     .panel-heading.panel-title
-      i.fa.fa-flash(style="color: #e25440;")
+      i.fa.fa-flash
       |  Actions
     .panel-body.text-center
       .grid
         .grid-cell.btn-group
-          button.btn(tooltip="Rescan all the VDI", type="button", style="width: 90%", ng-click="rescanSr(SR.id)")
+          button.btn(tooltip="Rescan all the VDI", tooltip-placement="top", type="button", style="width: 90%", ng-click="rescanSr(SR.id)")
             i.fa.fa-refresh.fa-2x.fa-fw
         .grid-cell.btn-group
-          button.btn(tooltip="Reconnect all hosts", type="button", style="width: 90%", ng-click="reconnectAllHosts()")
+          button.btn(tooltip="Reconnect all hosts", tooltip-placement="top", type="button", style="width: 90%", ng-click="reconnectAllHosts()")
             i.fa.fa-retweet.fa-2x.fa-fw
         .grid-cell.btn-group
-          button.btn(tooltip="Disconnect all hosts", type="button", style="width: 90%", xo-click="disconnectAllHosts()")
+          button.btn(tooltip="Disconnect all hosts", tooltip-placement="top", type="button", style="width: 90%", xo-click="disconnectAllHosts()")
             i.fa.fa-power-off.fa-2x.fa-fw
         .grid-cell.btn-group
-          button.btn(tooltip="Forget SR", type="button", style="width: 90%", xo-click="forgetSR(SR.id)")
+          button.btn(tooltip="Forget SR", tooltip-placement="top", type="button", style="width: 90%", xo-click="forgetSR(SR.id)")
             i.fa.fa-2x.fa-fw.fa-ban
         .grid-cell.btn-group
-          button.btn(tooltip="Remove SR", type="button", style="width: 90%", xo-click="removeSR(SR.id)")
+          button.btn(tooltip="Remove SR", tooltip-placement="top", type="button", style="width: 90%", xo-click="removeSR(SR.id)")
             i.fa.fa-2x.fa-trash-o
 //- TODO: Space panel
 .grid
   .panel.panel-default
     .panel-heading.panel-title
-      i.xo-icon-memory(style="color: #e25440;")
+      i.xo-icon-memory
       |  VDI Map
     .panel-body
       .progress
-        .progress-bar.progress-bar-vm(ng-if="((VDI.size/SR.size)*100) > 0.5", ng-repeat="VDI in SR.VDIs | resolve | orderBy:natural('name_label') track by VDI.id", role="progressbar", aria-valuemin="0", aria-valuenow="{{VDI.size}}", aria-valuemax="{{SR.size}}", style="width: {{[VDI.size, SR.size] | percentage}}", tooltip="{{VDI.name_label}} ({{[VDI.size, SR.size] | percentage}})")
+        .progress-bar.progress-bar-vm(
+          ng-if="((VDI.usage/SR.size)*100) > 0.5",
+          ng-repeat="VDI in SR.VDIs | resolve | orderBy:natural('name_label') track by VDI.id",
+          role="progressbar",
+          aria-valuemin="0",
+          aria-valuenow="{{VDI.usage}}",
+          aria-valuemax="{{SR.size}}",
+          style="width: {{[VDI.usage, SR.size] | percentage}}",
+          tooltip="{{VDI.name_label}} ({{VDI.usage | bytesToSize}}) {{[VDI.usage, SR.size] | percentage}}"
+        )
           //- display the name only if it fits in its progress bar
-          span(ng-if="VDI.name_label.length < ((VDI.size/SR.size)*100)") {{VDI.name_label}}
+          span(ng-if="VDI.name_label.length < ((VDI.usage/SR.size)*100)") {{VDI.name_label}}
       ul.list-inline.text-center
         li Total: {{SR.size | bytesToSize}}
-        li Currently used: {{SR.usage | bytesToSize}}
-        li Available: {{SR.size-SR.usage | bytesToSize}}
+        li Currently used: {{SR.physical_usage | bytesToSize}}
+        li Available: {{SR.size-SR.physical_usage | bytesToSize}}
 //- TODO: VDIs.
 .grid
   form(name = "disksForm" editable-form = '' onbeforesave = 'saveDisks($data)').panel.panel-default
     .panel-heading.panel-title
-      i.fa.fa-hdd-o(style="color: #e25440;")
+      i.xo-icon-disk
       |  Virtual disks
-      span.quick-edit(tooltip="Edit disks", ng-click="disksForm.$show()")
+      span.quick-edit(
+        ng-if="!disksForm.$visible"
+        tooltip="Edit disks"
+        ng-click="disksForm.$show()"
+      )
         i.fa.fa-edit.fa-fw
+      span.quick-edit(
+        ng-if="disksForm.$visible"
+        tooltip="Cancel Edit"
+        ng-click="disksForm.$cancel()"
+      )
+        i.fa.fa-undo.fa-fw
       span.quick-edit(tooltip="Rescan", ng-click="rescanSr(SR.id)")
         i.fa.fa-refresh.fa-fw
     .panel-body
       table.table.table-hover
         tr
-          th Name
-          th Description
-          th Size
-          th Virtual Machine:
-        tr(ng-repeat="VDI in SR.VDIs | resolve | orderBy:natural('name_label') | slice:(10*(currentVDIPage-1)):(10*currentVDIPage)")
+          th.col-sm-2 Name
+          th.col-sm-2 Description
+          th.col-sm-1 Tags
+          th.col-sm-1 Size
+          th.col-sm-1(ng-show="disksForm.$visible")
+          th.col-sm-2
+            | Virtual Machine:&nbsp;
+            span.pull-right: button.btn.btn-danger(type = 'button', xo-click = 'deleteSelectedVdis()', tooltip = 'Delete selected disks'): i.fa.fa-trash
+        tr(ng-repeat="VDI in VDIs | vdiFilter:vdiSearch | orderBy:natural('name_label') | slice:(10*(currentVDIPage-1)):(10*currentVDIPage)")
           td.oneliner
             span(
               editable-text="VDI.name_label"
               e-name = '{{VDI.id}}/name_label'
             )
               | {{VDI.name_label}} &nbsp;
-              span.label.label-info(ng-if="VDI.$snapshot_of") snapshot
+              span(ng-if="VDI.type === 'VDI-snapshot'")
+                span.label.label-info(ng-if="VDI.$snapshot_of") snapshot
+                span.label.label-warning(ng-if="!VDI.$snapshot_of") orphaned snapshot
           td.oneliner
             span(
               editable-text="VDI.name_description"
@@ -138,18 +155,34 @@
             )
               | {{VDI.name_description}}
           td
-            //- FIXME: should be editable, but the server needs first
-            //- to accept a human readable string.
-            | {{VDI.size | bytesToSize}}
+            xo-tag(object = 'VDI')
+          td
+            span(
+              editable-text="VDI.sizeValue"
+              e-name = '{{VDI.id}}/sizeValue'
+            )
+              | {{VDI.sizeValue}} {{VDI.sizeUnit}}
+          td(ng-show="disksForm.$visible")
+            span(
+              editable-select="VDI.sizeUnit"
+              e-ng-options="unit for unit in units"
+              e-name="{{VDI.id}}/sizeUnit"
+            )
           td.oneliner {{((VDI.$VBDs[0] | resolve).VM | resolve).name_label}}
-            span.pull-right.btn-group.quick-buttons
-              a(ng-if="(VDI.$VBDs[0] | resolve).attached", xo-click="disconnectVBD(VDI.$VBDs[0])")
-                i.fa.fa-unlink.fa-lg(tooltip="Disconnect this disk")
-              a(ng-if="!(VDI.$VBDs[0] | resolve).attached", xo-click="deleteVDI(VDI.id)")
-                i.fa.fa-trash-o.fa-lg(tooltip="Destroy this disk")
+            span.pull-right
+              .btn-group.quick-buttons
+                a(ng-if="(VDI.$VBDs[0] | resolve).attached", xo-click="disconnectVBD(VDI.$VBDs[0])")
+                  i.fa.fa-unlink.fa-lg(tooltip="Disconnect this disk")
+                a(ng-if="!(VDI.$VBDs[0] | resolve).attached", xo-click="deleteVDI(VDI.id)")
+                  i.fa.fa-trash-o.fa-lg(tooltip="Destroy this disk")
+              input(ng-if = '!(VDI.$VBDs[0] | resolve).attached', type = 'checkbox', ng-model = 'selectedForDelete[VDI.id]', tooltip = 'select for deletion')
         //- TODO: Ability to create new VDIs.
-      .center(ng-if = '(SR.VDIs | resolve).length > 10 || currentVDIPage > 1')
-        pagination(boundary-links="true", total-items="(SR.VDIs | resolve).length", ng-model="$parent.currentVDIPage", items-per-page="10", max-size="5", class="pagination-sm", previous-text="<", next-text=">", first-text="<<", last-text=">>")
+      .form-inline
+        .input-group
+          .input-group-addon: i.fa.fa-filter
+          input.form-control(type = 'text', ng-model = 'vdiSearch', placeholder = 'Enter your search here')
+      .center(ng-if = '(VDIs | vdiFilter:vdiSearch).length > 10 || currentVDIPage > 1')
+        pagination(boundary-links="true", total-items="(VDIs | vdiFilter:vdiSearch).length", ng-model="$parent.currentVDIPage", items-per-page="10", max-size="5", class="pagination-sm", previous-text="<", next-text=">", first-text="<<", last-text=">>")
       .btn-form(ng-show="disksForm.$visible")
         p.center
           button.btn.btn-default(
@@ -171,7 +204,7 @@
 .grid
   .panel.panel-default
     .panel-heading.panel-title
-      i.fa.fa-link(style="color: #e25440;")
+      i.fa.fa-link
       |  Connected hosts
       span.quick-edit(tooltip="Reconnect all hosts", ng-click="reconnectAllHosts()")
         i.fa.fa-plus-square.fa-fw
@@ -185,7 +218,7 @@
             span.label.label-success Connected
             span.pull-right.btn-group.quick-buttons
               a(xo-click="disconnectPBD(PBD.id)")
-                i.fa.fa-unlink.fa-lg(tooltip="Disconnect to this host")
+                i.fa.fa-unlink.fa-lg(tooltip="Disconnect from this host")
           td(ng-if="!PBD.attached")
             span.label.label-default Disconnected
             span.pull-right.btn-group.quick-buttons
@@ -193,7 +226,7 @@
                 i.fa.fa-link.fa-lg(tooltip="Reconnect to this host")
   .panel.panel-default
     .panel-heading.panel-title
-      i.fa.fa-comments(style="color: #e25440;")
+      i.fa.fa-comments
       |  Logs
     .panel-body
       p.center(ng-if="SR.messages | isEmpty") No recent logs

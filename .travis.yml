@@ -1,0 +1,10 @@
+language: node_js
+node_js:
+  - 'stable'
+
+# Use containers.
+# http://docs.travis-ci.com/user/workers/container-based-infrastructure/
+sudo: false
+
+before_install:
+  - npm i -g npm

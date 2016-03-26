@@ -3,10 +3,15 @@ import angular from 'angular'
 import Bluebird from 'bluebird'
 import makeError from 'make-error'
 import parse from '@julien-f/json-rpc/parse'
+import uiBootstrap from 'angular-ui-bootstrap'
 import WebSocket from 'ws'
 import {EventEmitter} from 'events'
 
+import modal from './modal'
+
 const calls = {}
+
+let blockTime
 
 function jsonRpcCall (socket, method, params = {}) {
   const req = format.request(method, params)
@@ -47,9 +52,9 @@ function blockXoaAccess (xoaState) {
 export const NotRegistered = makeError('NotRegistered')
 export const AuthenticationFailed = makeError('AuthenticationFailed')
 export default angular.module('updater', [
-  // notify
-  ])
-.factory('updater', function ($interval, $timeout) {
+  uiBootstrap
+])
+.factory('updater', function ($interval, $timeout, $window, $modal) {
   class Updater extends EventEmitter {
     constructor () {
       super()
@@ -76,7 +81,19 @@ export default angular.module('updater', [
       this.emit('upgrading')
       this.upgrading = true
       return this._update(true)
-      .return(true)
+    }
+
+    _promptForReload () {
+      const modalInstance = $modal.open({
+        template: modal,
+        backdrop: false
+      })
+
+      return modalInstance.result
+      .then(() => {
+        $window.location.reload()
+      })
+      .catch(() => true)
     }
 
     _open () {
@@ -150,6 +167,8 @@ export default angular.module('updater', [
             this.emit('end', end)
             if (this._lowState.state === 'updater-upgraded') {
               this.update()
+            } else if (this._lowState.state === 'xoa-upgraded') {
+              this._promptForReload()
             }
             this.xoaState()
           })
@@ -202,19 +221,22 @@ export default angular.module('updater', [
           }
         })
       })
-      .catch(NotRegistered, () => this.registerState = 'unregistered')
+      .catch(NotRegistered, () => {
+        this.registerState = 'unregistered'
+      })
       .catch(error => {
         this.registerError = error.message
         this.registerState = 'error'
       })
     }
 
-    register (email, password) {
+    register (email, password, renew = false) {
       return this._open()
       .then(socket => {
-        return jsonRpcCall(socket, 'register', {email, password})
+        return jsonRpcCall(socket, 'register', {email, password, renew})
         .then(token => {
           this.registerState = 'registered'
+          this.registerError = ''
           this.token = token
           return token
         })
@@ -226,6 +248,7 @@ export default angular.module('updater', [
         } else {
           this.registerError = error.message
           this.registerState = 'error'
+          throw error
         }
       })
     }
@@ -315,7 +338,6 @@ export default angular.module('updater', [
         return jsonRpcCall(socket, 'configure', config)
         .then(configuration => this._configuration = configuration)
       })
-
     }
   }
 
@@ -331,11 +353,18 @@ export default angular.module('updater', [
     }
     let {user} = xoApi
     let loggedIn = !!user
-    if (!loggedIn || !updater._xoaState || state.name === 'settings.update') {
+    if (!loggedIn || !updater._xoaState || state.name === 'settings.update') { // no reason to block
       return
     } else if (blockXoaAccess(updater._xoaState)) {
+      blockTime || (blockTime = updater._xoaStateTS)
+      updater.xoaState()
+      if (Date.now() - blockTime < (60 * 1000)) { // We have 1 min before blocking for real
+        return
+      }
       event.preventDefault()
       $state.go('settings.update')
+    } else {
+      blockTime = undefined
     }
   })
 })

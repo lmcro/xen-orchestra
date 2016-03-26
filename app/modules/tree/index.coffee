@@ -7,26 +7,29 @@ throttle = require 'lodash.throttle'
 sourceHost = null
 
 module.exports = angular.module 'xoWebApp.tree', [
-  require 'angular-file-upload'
   require 'angular-ui-router'
+  require('ng-file-upload')
 
-  require 'xo-api'
-  require 'xo-services'
+  require('xo-api').default
+  require('xo-services').default
 
-  require '../delete-vms'
+  require('../delete-vms').default
 ]
   .config ($stateProvider) ->
     $stateProvider.state 'tree',
-      url: '/tree'
       controller: 'TreeCtrl'
+      data: {
+        requireAdmin: true
+      },
       template: require './view'
+      url: '/tree'
   .controller 'TreeCtrl', (
     $scope
-    $upload
     dateFilter
     deleteVmsModal
     modal
     notify
+    Upload
     xo
     xoApi
   ) ->
@@ -102,30 +105,69 @@ module.exports = angular.module 'xoWebApp.tree', [
     $scope.startHost = (id) ->
       xo.host.start id
 
+    bulkConfirms = {
+      'stopVM': {
+        title: 'VM shutdown',
+        message: 'Are you sure you want to shutdown all selected VMs ?'
+      },
+      'rebootVM': {
+        title: 'VM reboot',
+        message: 'Are you sure you want to reboot all selected VMs ?'
+      },
+      'suspendVM': {
+        title: 'VM suspend',
+        message: 'Are you sure you want to suspend all selected VMs ?'
+      },
+      'force_rebootVM': {
+        title: 'VM force reboot',
+        message: 'Are you sure you want to force reboot for all selected VMs ?'
+      },
+      'force_stopVM': {
+        title: 'VM force shutdown',
+        message: 'Are you sure you want to force shutdown for all selected VMs ?'
+      },
+      'migrateVM': {
+        title: 'VM migrate',
+        message: 'Are you sure you want to migrate all selected VMs ?'
+      }
+    }
+
+    unitConfirms = {
+      'stopVM': {
+        title: 'VM shutdown',
+        message: 'Are you sure you want to shutdown this VM ?'
+      },
+      'rebootVM': {
+        title: 'VM reboot',
+        message: 'Are you sure you want to reboot this VM ?'
+      },
+      'suspendVM': {
+        title: 'VM suspend',
+        message: 'Are you sure you want to suspend this VM ?'
+      },
+      'force_rebootVM': {
+        title: 'VM force reboot',
+        message: 'Are you sure you want to force reboot for this VM ?'
+      },
+      'force_stopVM': {
+        title: 'VM force shutdown',
+        message: 'Are you sure you want to force shutdown for this VM ?'
+      },
+      'migrateVM': {
+        title: 'VM migrate',
+        message: 'Are you sure you want to migrate this VM ?'
+      }
+    }
+
     $scope.startVM = xo.vm.start
     $scope.stopVM = xo.vm.stop
     $scope.force_stopVM = (id) -> xo.vm.stop id, true
     $scope.rebootVM = xo.vm.restart
     $scope.force_rebootVM = (id) -> xo.vm.restart id, true
-    $scope.suspendVM = (id) -> xo.vm.suspend id, true
+    $scope.suspendVM = (id) -> xo.vm.suspend id
     $scope.resumeVM = (id) -> xo.vm.resume id, true
+    $scope.migrateVM = (id, hostId) -> xo.vm.migrate id, hostId
 
-    $scope.migrateVM = (id, hostId) ->
-      (xo.vm.migrate id, hostId).catch (error) ->
-        modal.confirm
-          title: 'VM migrate'
-          message: 'This VM can\'t be migrated with Xen Motion to this host because they don\'t share any storage. Do you want to try a Xen Storage Motion?'
-
-        .then ->
-          notify.info {
-            title: 'VM migration'
-            message: 'The migration process started'
-          }
-
-          xo.vm.migratePool {
-            id
-            target_host_id: hostId
-          }
     $scope.snapshotVM = (id) ->
       vm = xoApi.get(id)
       date = dateFilter Date.now(), 'yyyy-MM-ddTHH:mmZ'
@@ -204,11 +246,31 @@ module.exports = angular.module 'xoWebApp.tree', [
         unless angular.isFunction fn
           throw new Error "invalid action #{action}"
 
-        for id, selected of selected_VMs
-          fn id, args... if selected
+        runBulk = () ->
+          for id, selected of selected_VMs
+            fn id, args... if selected
+          # Unselects all VMs.
+          $scope.selectVMs false
 
-        # Unselects all VMs.
-        $scope.selectVMs false
+        if action of bulkConfirms
+          modal.confirm(bulkConfirms[action])
+          .then runBulk
+        else
+          runBulk()
+
+      $scope.confirmAction = (action, args...) ->
+        fn = $scope[action]
+        unless angular.isFunction fn
+          throw new Error "invalid action #{action}"
+
+        doAction = () ->
+          fn args...
+
+        if action of unitConfirms
+          modal.confirm(unitConfirms[action])
+          .then doAction
+        else
+          doAction()
 
       $scope.importVm = ($files, id) ->
         file = $files[0]
@@ -219,7 +281,7 @@ module.exports = angular.module 'xoWebApp.tree', [
 
         xo.vm.import id
         .then ({ $sendTo: url }) ->
-          return $upload.http {
+          return Upload.http {
             method: 'POST'
             url
             data: file
@@ -234,7 +296,7 @@ module.exports = angular.module 'xoWebApp.tree', [
         file = $files[0]
         xo.pool.patch id
         .then ({ $sendTo: url }) ->
-          return $upload.http {
+          return Upload.http {
             method: 'POST'
             url
             data: file
@@ -290,25 +352,11 @@ module.exports = angular.module 'xoWebApp.tree', [
           # sourceHost = event.originalEvent.dataTransfer.getData('host')
           targetHost = event.currentTarget.getAttribute('host')
           if sourceHost isnt targetHost
-            notify.info({
-              title: 'VM Migration'
-              message: 'Starting your VM migration'
-            })
-            (xo.vm.migrate vm, targetHost).catch (error) ->
-              modal.confirm
-                title: 'VM migrate'
-                message: 'This VM can\'t be migrated with Xen Motion to this host because they don\'t share any storage. Do you want to try a Xen Storage Motion?'
-
-              .then ->
-                notify.info {
-                  title: 'VM migration'
-                  message: 'The migration process started'
-                }
-
-                xo.vm.migratePool {
-                  id: vm
-                  target_host_id: targetHost
-                }
+            modal.confirm
+              title: 'VM migrate'
+              message: 'Are you sure you want to migrate this VM?'
+            .then ->
+              xo.vm.migrate vm, targetHost
       restrict: 'A'
     }
   # A module exports its name.

@@ -19,16 +19,14 @@ export default angular.module('xoWebApp.newSr', [
     })
   })
   .controller('NewSrCtrl', function ($scope, $state, $stateParams, xo, xoApi, notify, modal, bytesToSizeFilter) {
-
     this.reset = function (data = {}) {
-
       this.data = {}
       delete this.lockCreation
       this.lock = !(
         (data.srType === 'Local') &&
-        (data.srPath && data.srPath.path)
+        (data.srPath && data.srPath.path) ||
+        data.srType === 'SMB'
       )
-
     }
 
     this.resetLists = function () {
@@ -48,7 +46,6 @@ export default angular.module('xoWebApp.newSr', [
      * Loads NFS paths and iScsi iqn`s
      */
     this.populateSettings = function (type, server, auth, user, password) {
-
       this.reset()
       this.loading = true
 
@@ -82,7 +79,6 @@ export default angular.module('xoWebApp.newSr', [
 
         xoApi.call('sr.probeIscsiIqns', params)
         .then(response => {
-
           if (response.length > 0) {
             this.data.iqns = response
           } else {
@@ -91,7 +87,6 @@ export default angular.module('xoWebApp.newSr', [
               message: 'No IQNs found'
             })
           }
-
         })
         .catch(error => notify.warning({
           title: 'iSCSI Detection',
@@ -101,7 +96,6 @@ export default angular.module('xoWebApp.newSr', [
       } else {
         this.loading = false
       }
-
     }
 
     /*
@@ -124,7 +118,6 @@ export default angular.module('xoWebApp.newSr', [
 
       xoApi.call('sr.probeIscsiLuns', params)
         .then(response => {
-
           forEach(response, item => {
             item.display = 'LUN ' + item.id + ': ' +
             item.serial + ' ' + bytesToSizeFilter(item.size) +
@@ -220,21 +213,43 @@ export default angular.module('xoWebApp.newSr', [
           })
           break
 
-        case 'NFS_ISO':
         case 'Local':
+          operationToPromise = xoApi.call('sr.createIso', {
+            host: this.container.id,
+            nameLabel: data.srName,
+            nameDescription: data.srDesc,
+            type: 'local',
+            path: data.srPath.path
+          })
+          break
+
+        case 'NFS_ISO':
           let server = this._parseAddress(data.srServer || '')
 
-          let path = (
-            data.srType === 'NFS_ISO' ?
-              server.host + ':' :
-              ''
+          const path = (
+            data.srType === 'NFS_ISO'
+              ? server.host + ':'
+              : ''
           ) + data.srPath.path
 
           operationToPromise = xoApi.call('sr.createIso', {
             host: this.container.id,
             nameLabel: data.srName,
             nameDescription: data.srDesc,
+            type: 'nfs',
             path
+          })
+          break
+
+        case 'SMB':
+          operationToPromise = xoApi.call('sr.createIso', {
+            host: this.container.id,
+            nameLabel: data.srName,
+            nameDescription: data.srDesc,
+            type: 'smb',
+            path: data.srServer,
+            user: data.user,
+            password: data.password
           })
           break
 
@@ -334,13 +349,11 @@ export default angular.module('xoWebApp.newSr', [
 
       xoApi.call('sr.probeIscsiExists', params)
       .then(response => {
-
         if (response.length > 0) {
           this.data.scsiList = this._processSRList(response)
         }
 
         this.lock = !Boolean(data.srIScsiId)
-
       })
       .catch(error => {
         notify.error({
@@ -362,13 +375,11 @@ export default angular.module('xoWebApp.newSr', [
         serverPath: data.srPath.path
       })
       .then(response => {
-
         if (response.length > 0) {
-          this.data.scsiList = this._processSRList(response)
+          this.data.nfsList = this._processSRList(response)
         }
 
         this.lock = !Boolean(data.srPath.path)
-
       })
       .catch(error => {
         notify.error({
@@ -413,10 +424,9 @@ export default angular.module('xoWebApp.newSr', [
           $state.go('SRs_view', {id})
         })
         .catch(error => notify.error({
-            title: 'reattach',
-            message: error.message
-          })
-        )
+          title: 'reattach',
+          message: error.message
+        }))
         .finally(() => {
           this.lock = false
           this.attaching = false

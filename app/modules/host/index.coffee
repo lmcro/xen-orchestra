@@ -5,12 +5,15 @@ map = require 'lodash.map'
 omit = require 'lodash.omit'
 sum = require 'lodash.sum'
 throttle = require 'lodash.throttle'
+find = require 'lodash.find'
+filter = require 'lodash.filter'
 
 #=====================================================================
 
 module.exports = angular.module 'xoWebApp.host', [
-  require 'angular-file-upload'
   require 'angular-ui-router'
+  require('ng-file-upload')
+  require('tag').default
 ]
   .config ($stateProvider) ->
     $stateProvider.state 'hosts_view',
@@ -19,10 +22,10 @@ module.exports = angular.module 'xoWebApp.host', [
       template: require './view'
   .controller 'HostCtrl', (
     $scope, $stateParams, $http
-    $upload
-    $window
     $timeout
+    $window
     dateFilter
+    Upload
     xoApi, xo, modal, notify, bytesToSizeFilter
   ) ->
     do (
@@ -61,6 +64,7 @@ module.exports = angular.module 'xoWebApp.host', [
     $scope.currentLogPage = 1
     $scope.currentPCIPage = 1
     $scope.currentGPUPage = 1
+    $scope.currentLicensePage = 1
 
     $scope.refreshStatControl = refreshStatControl = {
       baseStatInterval: 5000
@@ -111,6 +115,8 @@ module.exports = angular.module 'xoWebApp.host', [
         $scope.host = host
         return unless host?
 
+        $scope.hostParams = Object.getOwnPropertyNames(host.license_params)
+
         pool = $scope.pool = xoApi.get host.$poolId
 
         SRsToPBDs = $scope.SRsToPBDs = Object.create null
@@ -130,7 +136,7 @@ module.exports = angular.module 'xoWebApp.host', [
     )
 
     $scope.$watch('vms', (vms) =>
-      $scope.vCPUs = sum(vms, (vm) => vm.CPUs.number)
+      $scope.vCPUs = sum(map(vms, (vm) => +vm.CPUs.number))
     )
 
     $scope.cancelTask = (id) ->
@@ -155,12 +161,22 @@ module.exports = angular.module 'xoWebApp.host', [
     $scope.pool_addHost = (id) ->
       xo.host.attach id
 
+    $scope.pools = xoApi.getView('pools')
+    $scope.hostsByPool = xoApi.getIndex('hostsByPool')
+    $scope.pool_moveHost = (target) ->
+      modal.confirm({
+        title: 'Move host to another pool'
+        message: 'Are you sure you want to move this host?'
+      }).then ->
+        xo.pool.mergeInto({ source: $scope.pool.id, target: target.id })
+
     $scope.pool_removeHost = (id) ->
       modal.confirm({
         title: 'Remove host from pool'
-        message: 'Are you sure you want to detach this host from its pool? It will be automatically rebooted'
+        message: 'Are you sure you want to detach this host from its pool? It will be automatically rebooted AND LOCAL STORAGE WILL BE ERASED.'
       }).then ->
         xo.host.detach id
+
     $scope.rebootHost = (id) ->
       modal.confirm({
         title: 'Reboot host'
@@ -200,6 +216,14 @@ module.exports = angular.module 'xoWebApp.host', [
         message: 'Are you sure you want to shutdown this host?'
       }).then ->
         xo.host.stop id
+
+
+    $scope.emergencyShutdownHost = (hostId) ->
+      modal.confirm({
+        title: 'Shutdown host'
+        message: 'Are you sure you want to suspend all the VMs on this host and shut the host down?'
+      }).then ->
+        xo.host.emergencyShutdownHost hostId
 
     $scope.saveHost = ($data) ->
       {host} = $scope
@@ -275,7 +299,7 @@ module.exports = angular.module 'xoWebApp.host', [
 
       xo.vm.import id
       .then ({ $sendTo: url }) ->
-        return $upload.http {
+        return Upload.http {
           method: 'POST'
           url
           data: file
@@ -295,7 +319,7 @@ module.exports = angular.module 'xoWebApp.host', [
       }
 
       params = {
-        host: $scope.host.id
+        pool: $scope.host.$pool
         name,
       }
 
@@ -304,10 +328,37 @@ module.exports = angular.module 'xoWebApp.host', [
       if vlan then params.vlan = vlan
       if description then params.description = description
 
-      xoApi.call 'host.createNetwork', params
+      xoApi.call 'network.create', params
       .then ->
         $scope.creatingNetwork = false
         $scope.createNetworkWaiting = false
+
+    $scope.addIp = (pif, ip, netmask, dns, gateway, ipMethod) ->
+      notify.info {
+        title: 'IP configuration...'
+        message: 'Configuring new IP mode'
+      }
+      xoApi.call('pif.reconfigureIp', {
+        id: pif.id,
+        mode: ipMethod,
+        ip,
+        netmask,
+        dns,
+        gateway
+      })
+
+    $scope.physicalPifs = () ->
+      physicalPifs = []
+      forEach $scope.host.$PIFs, (pif) ->
+        pif = xoApi.get(pif)
+        if pif.physical
+          physicalPifs.push pif.id
+      return physicalPifs
+
+    $scope.isPoolPatch = (patch) ->
+      return false if $scope.poolPatches is undefined
+      return $scope.poolPatches.hasOwnProperty(patch.uuid)
+
 
     $scope.isPoolPatchApplied = (patch) ->
       return true if patch.applied
@@ -329,25 +380,63 @@ module.exports = angular.module 'xoWebApp.host', [
       }
       xo.host.installPatch id, patchUid
 
+    $scope.installAllPatches = (id) ->
+      modal.confirm({
+        title: 'Install all the missing patches'
+        message: 'Are you sure you want to install all the missing patches on this host? This could take a while...'
+      }).then ->
+        console.log('Installing all patches on host ' + id)
+        xo.host.installAllPatches id
+
     $scope.refreshStats = (id) ->
       return xo.host.refreshStats id
-
         .then (result) ->
-          result.cpuSeries = []
-          forEach result.cpus, (v,k) ->
-            result.cpuSeries.push 'CPU ' + k
+          result.stats.cpuSeries = []
+
+          if result.stats.cpus.length >= 12
+            nValues = result.stats.cpus[0].length
+            nCpus = result.stats.cpus.length
+            cpuAVG = (0 for [1..nValues])
+
+            forEach result.stats.cpus, (cpu) ->
+              forEach cpu, (stat, index) ->
+                cpuAVG[index] += stat
+                return
+              return
+
+            forEach cpuAVG, (cpu, index) ->
+              cpuAVG[index] /= nCpus
+              return
+
+            result.stats.cpus = [cpuAVG]
+            result.stats.cpuSeries.push 'CPU AVG'
+          else
+            forEach result.stats.cpus, (v,k) ->
+              result.stats.cpuSeries.push 'CPU ' + k
+              return
+
+          result.stats.pifSeries = []
+          pifsArray = []
+          forEach result.stats.pifs.rx, (v,k) ->
+            return unless v
+            result.stats.pifSeries.push '#' + k + ' in'
+            result.stats.pifSeries.push '#' + k + ' out'
+            pifsArray.push (v || [])
+            pifsArray.push (result.stats.pifs.tx[k] || [])
             return
-          result.pifSeries = []
-          forEach result.pifs, (v,k) ->
-            result.pifSeries.push '#' + Math.floor(k/2) + ' ' + if k % 2 then 'out' else 'in'
-            return
-          forEach result.date, (v,k) ->
-            result.date[k] = new Date(v*1000).toLocaleTimeString()
-          forEach result.memoryUsed, (v, k) ->
-            result.memoryUsed[k] = v*1024
-          forEach result.memory, (v, k) ->
-            result.memory[k] = v*1024
-          $scope.stats = result
+          result.stats.pifs = pifsArray
+
+          forEach result.stats.memoryUsed, (v, k) ->
+            result.stats.memoryUsed[k] = v*1024
+          forEach result.stats.memory, (v, k) ->
+            result.stats.memory[k] = v*1024
+
+          result.stats.date = []
+          timestamp = result.endTimestamp
+          for i in [result.stats.memory.length-1..0] by -1
+            result.stats.date.unshift new Date(timestamp*1000).toLocaleTimeString()
+            timestamp -= 5
+          $scope.stats = result.stats
 
     $scope.statView = {
       cpuOnly: false,
@@ -355,5 +444,23 @@ module.exports = angular.module 'xoWebApp.host', [
       netOnly: false,
       loadOnly: false
     }
+
+    $scope.canAdmin = (id = undefined) ->
+      if id == undefined
+        id = $scope.host && $scope.host.id
+
+      return id && xoApi.canInteract(id, 'administrate') || false
+
+    $scope.canOperate = (id = undefined) ->
+      if id == undefined
+        id = $scope.host && $scope.host.id
+
+      return id && xoApi.canInteract(id, 'operate') || false
+
+    $scope.canView = (id = undefined) ->
+      if id == undefined
+        id = $scope.host && $scope.host.id
+
+      return id && xoApi.canInteract(id, 'view') || false
   # A module exports its name.
   .name

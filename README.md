@@ -33,13 +33,11 @@ $ npm run dev
 
 If you are certain the bug is exclusively related to XO-Web, you may use the [bugtracker of this repository](https://github.com/vatesfr/xo-web/issues).
 
-Otherwise, please consider using the [bugtracker of the general repository](https://github.com/vatesfr/xo/issues).
-
 ## Process for new release
 
 ```bash
-# Switch to the master branch.
-git checkout master
+# Switch to the stable branch.
+git checkout stable
 
 # Fetches latest changes.
 git pull --ff-only
@@ -53,12 +51,12 @@ npm version minor
 # Go back to the next-release branch.
 git checkout next-release
 
-# Fetches the last changes (the merge and version bump) from master to
+# Fetches the last changes (the merge and version bump) from stable to
 # next-release.
-git merge --ff-only master
+git merge --ff-only stable
 
 # Push the changes on git.
-git push --follow-tags origin master next-release
+git push --follow-tags origin stable next-release
 
 # Publish this release to npm.
 npm publish

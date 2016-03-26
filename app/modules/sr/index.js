@@ -1,16 +1,22 @@
 import angular from 'angular'
+import escapeRegExp from 'lodash.escaperegexp'
+import filter from 'lodash.filter'
 import forEach from 'lodash.foreach'
 import isEmpty from 'lodash.isempty'
+import trim from 'lodash.trim'
 import uiRouter from 'angular-ui-router'
 
 import Bluebird from 'bluebird'
+
+import xoTag from 'tag'
 
 import view from './view'
 
 // ===================================================================
 
 export default angular.module('xoWebApp.sr', [
-  uiRouter
+  uiRouter,
+  xoTag
 ])
   .config(function ($stateProvider) {
     $stateProvider.state('SRs_view', {
@@ -19,17 +25,51 @@ export default angular.module('xoWebApp.sr', [
       template: view
     })
   })
-  .controller('SrCtrl', function ($scope, $stateParams, $state, $q, notify, xoApi, xo, modal, $window, bytesToSizeFilter) {
-
+  .filter('vdiFilter', (xoApi, filterFilter) => {
+    return (input, search) => {
+      search && (search = trim(search).toLowerCase())
+      return filter(input, vdi => {
+        let vbd, vm
+        let vmName = vdi.$VBDs && vdi.$VBDs[0] && (vbd = xoApi.get(vdi.$VBDs[0])) && (vm = xoApi.get(vbd.VM)) && vm.name_label
+        vmName && (vmName = vmName.toLowerCase())
+        return !search || (vmName && (vmName.search(escapeRegExp(search)) !== -1) || filterFilter([vdi], search).length)
+      })
+    }
+  })
+  .controller('SrCtrl', function ($scope, $stateParams, $state, $q, notify, xoApi, xo, modal, $window, bytesToSizeFilter, sizeToBytesFilter) {
     $window.bytesToSize = bytesToSizeFilter //  FIXME dirty workaround to custom a Chart.js tooltip template
+
+    $scope.units = ['MiB', 'GiB', 'TiB']
 
     $scope.currentLogPage = 1
     $scope.currentVDIPage = 1
 
     let {get} = xoApi
     $scope.$watch(() => xoApi.get($stateParams.id), function (SR) {
+      const VDIs = []
+      if (SR) {
+        forEach(SR.VDIs, vdi => {
+          vdi = xoApi.get(vdi)
+          if (vdi) {
+            const size = bytesToSizeFilter(vdi.size)
+            VDIs.push({...vdi, size, sizeValue: size.split(' ')[0], sizeUnit: size.split(' ')[1]})
+          }
+        })
+      }
       $scope.SR = SR
+      $scope.VDIs = VDIs
     })
+
+    $scope.selectedForDelete = {}
+    $scope.deleteSelectedVdis = function () {
+      return modal.confirm({
+        title: 'VDI deletion',
+        message: 'Are you sure you want to delete all selected VDIs? This operation is irreversible.'
+      }).then(function () {
+        forEach($scope.selectedForDelete, (selected, id) => selected && xo.vdi.delete(id))
+        $scope.selectedForDelete = {}
+      })
+    }
 
     $scope.saveSR = function ($data) {
       let {SR} = $scope
@@ -62,19 +102,24 @@ export default angular.module('xoWebApp.sr', [
     $scope.disconnectVBD = function (id) {
       console.log('Disconnect VBD', id)
 
-      return xoApi.call('vbd.disconnect', {id: id})
+      return modal.confirm({
+        title: 'VDI disconnection',
+        message: 'Are you sure you want to disconnect this VDI?'
+      }).then(function () {
+        return xoApi.call('vbd.disconnect', {id: id})
+      })
     }
 
     $scope.connectPBD = function (id) {
       console.log('Connect PBD', id)
 
-      return xoApi.call('pbd.connect', {id: id})
+      return xo.pbd.connect(id)
     }
 
     $scope.disconnectPBD = function (id) {
       console.log('Disconnect PBD', id)
 
-      return xoApi.call('pbd.disconnect', {id: id})
+      return xo.pbd.disconnect(id)
     }
 
     $scope.reconnectAllHosts = function () {
@@ -155,6 +200,7 @@ export default angular.module('xoWebApp.sr', [
     $scope.saveDisks = function (data) {
       // Group data by disk.
       let disks = {}
+      let sizeChanges = false
       forEach(data, function (value, key) {
         let i = key.indexOf('/')
 
@@ -164,27 +210,52 @@ export default angular.module('xoWebApp.sr', [
         ;(disks[id] || (disks[id] = {}))[prop] = value
       })
 
-      let promises = []
       forEach(disks, function (attributes, id) {
-        // Keep only changed attributes.
         let disk = get(id)
-
-        forEach(attributes, function (value, name) {
-          if (value === disk[name]) {
-            delete attributes[name]
-          }
-        })
-
-        if (!isEmpty(attributes)) {
-          // Inject id.
-          attributes.id = id
-
-          // Ask the server to update the object.
-          promises.push(xoApi.call('vdi.set', attributes))
+        attributes.size = bytesToSizeFilter(sizeToBytesFilter(attributes.sizeValue + ' ' + attributes.sizeUnit))
+        if (attributes.size !== bytesToSizeFilter(disk.size)) { // /!\ attributes are provided by a modified copy of disk
+          sizeChanges = true
+          return false
         }
       })
 
-      return $q.all(promises)
+      let promises = []
+
+      const preCheck = sizeChanges ? modal.confirm({
+        title: 'Disk resizing',
+        message: 'Growing the size of a disk is not reversible'
+      }) : $q.resolve()
+
+      return preCheck
+      .then(() => {
+        forEach(disks, function (attributes, id) {
+          let disk = get(id)
+
+          // Resize disks
+          attributes.size = bytesToSizeFilter(sizeToBytesFilter(attributes.sizeValue + ' ' + attributes.sizeUnit))
+          if (attributes.size !== bytesToSizeFilter(disk.size)) { // /!\ attributes are provided by a modified copy of disk
+            promises.push(xo.disk.resize(id, attributes.size))
+          }
+          delete attributes.size
+
+          // Keep only changed attributes.
+          forEach(attributes, function (value, name) {
+            if (value === disk[name]) {
+              delete attributes[name]
+            }
+          })
+
+          if (!isEmpty(attributes)) {
+            // Inject id.
+            attributes.id = id
+
+            // Ask the server to update the object.
+            promises.push(xoApi.call('vdi.set', attributes))
+          }
+        })
+
+        return $q.all(promises)
+      })
     }
   })
 

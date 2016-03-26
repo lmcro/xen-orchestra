@@ -21,12 +21,12 @@ nav.navbar.navbar-inverse.navbar-fixed-top(role = 'navigation')
           type = 'text'
           placeholder = ''
           ng-model = '$root.listFilter'
-          ng-change = 'navbar.ensureListView()'
+          ng-change = 'ensureListView($root.listFilter)'
         )
         span.input-group-btn
           button.btn.btn-search(
             type = 'button'
-            ng-click = 'navbar.ensureListView()'
+            ng-click = 'ensureListView($root.listFilter)'
           )
             i.fa.fa-search
     //- /Search form.
@@ -52,7 +52,7 @@ nav.navbar.navbar-inverse.navbar-fixed-top(role = 'navigation')
           i.xo-icon-task
         ul.dropdown-menu.inverse
           li.task-menu(
-            ng-repeat="task in navbar.tasks.all | orderBy:natural('name_label') track by task.id"
+            ng-repeat="task in navbar.tasks.all | map | orderBy:natural('name_label') track by task.id"
           )
             a(
               ui-sref="hosts_view({id: task.$host})"
@@ -85,15 +85,27 @@ nav.navbar.navbar-inverse.navbar-fixed-top(role = 'navigation')
             a(ui-sref="list")
               i.fa.fa-align-justify
               |  Flat view
-          //- li.disabled(ui-sref-active="active")
-          //-   a(ui-sref="graph")
-          //-     i.fa.fa-sitemap
-          //-     |  Graphs view
+          li(
+            ui-sref-active="active"
+            ng-class = '{ disabled: navbar.user.permission !== "admin" }'
+          )
+            a(ui-sref="dashboard.index")
+              i.fa.fa-dashboard
+              |  Dashboard
           li.divider
-          li
-            a(ui-sref = 'scheduler.index')
-              i.fa.fa-clock-o
-              |  Scheduler
+          li(ng-class = '{ disabled: navbar.user.permission !== "admin" }')
+            a(ui-sref = 'self.index')
+              i.fa.fa-cloud
+              |  Self Service
+          li.divider
+          li(ng-class = '{ disabled: navbar.user.permission !== "admin" }')
+            a(ui-sref = 'backup.index')
+              i.fa.fa-archive
+              |  Backup
+          li(ng-class = '{ disabled: navbar.user.permission !== "admin" }')
+            a(ui-sref = 'taskscheduler.index')
+              i.fa.fa-cogs
+              |  Job Manager
           li.divider
           li(
             ui-sref-active = 'active'
@@ -119,7 +131,7 @@ nav.navbar.navbar-inverse.navbar-fixed-top(role = 'navigation')
           i.fa.fa-exclamation-triangle.text-danger(ng-if = 'navbar.updater.state == "error"', tooltip = 'Can\'t fetch update information')
 
       li
-        a(ui-sref="settings.users", tooltip="{{navbar.user.email}}")
+        a(ng-if = '!navbar.user.provider', ui-sref="{{navbar.user.provider ? 'settings.users' : 'settings.user'}}", tooltip="{{navbar.user.email}}")
           i.fa.fa-user
           span.hidden-sm  {{navbar.user.email}}
       li

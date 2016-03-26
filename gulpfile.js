@@ -86,9 +86,10 @@ function browserify (path, opts) {
     fullPaths: !PRODUCTION
   })
 
-  if (!PRODUCTION) {
-    bundler = require('watchify')(bundler)
+  if (PRODUCTION) {
     bundler.plugin('bundle-collapser/plugin')
+  } else {
+    bundler = require('watchify')(bundler)
   }
 
   // Append the extension if necessary.
@@ -264,14 +265,14 @@ gulp.task('copyAssets', [
 ], function copyAssets () {
   var imgStream
   if (PRODUCTION) {
-    var imgFilter = $.filter('**/*.{gif,jpg,jpeg,png,svg}')
+    var imgFilter = $.filter('**/*.{gif,jpg,jpeg,png,svg}', {restore: true})
 
     imgStream = combine(
       imgFilter,
       $.imagemin({
         progressive: true
       }),
-      imgFilter.restore()
+      imgFilter.restore
     )
   } else {
     imgStream = noop()
@@ -292,6 +293,16 @@ gulp.task('copyAssets', [
   ])
 })
 
+gulp.task('copyFontMfizz', function copyAssets () {
+  return pipe([
+    src(
+      '*',
+      __dirname + '/font-mfizz-2.0/'
+    ),
+    dest('styles')
+  ])
+})
+
 gulp.task('installBowerComponents', function installBowerComponents (done) {
   require('bower').commands.install()
     .on('error', done)
@@ -306,7 +317,8 @@ gulp.task('build', [
   'buildPages',
   'buildScripts',
   'buildStyles',
-  'copyAssets'
+  'copyAssets',
+  'copyFontMfizz'
 ])
 
 gulp.task('clean', function clear (done) {

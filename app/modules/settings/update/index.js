@@ -36,25 +36,24 @@ export default angular.module('settings.update', [
     this.updater = updater
 
     this.updater.isRegistered()
-    .then(() => this.updater.on('end', () => {
-      if (this.updater.state === 'registerNeeded' && this.updater.registerState !== 'unregistered' && this.updater.registerState !== 'error') {
-        this.updater.isRegistered()
-      }
-    }))
+    .then(() => this.updater.on('end', () => this.updater.isRegistered()))
     .catch(err => console.error(err))
 
     this.updater.getConfiguration()
     .then(configuration => this.configuration = _assign({}, configuration))
+    .then(() => this.withAuth = Boolean(this.configuration.proxyUser))
     .catch(error => notify.error({
       title: 'XOA Updater',
       message: error.message
     }))
 
-    this.registerXoa = (email, password) => {
+    this.registerXoa = (email, password, renewRegister) => {
       this.regPwd = ''
-      this.updater.register(email, password)
+      this.updater.register(email, password, renewRegister)
+      .tap(() => this.renewRegister = false)
       .then(() => this.updater.update())
       .catch(AuthenticationFailed, () => {})
+      .catch(err => console.error(err))
     }
 
     this.update = () => {
@@ -73,12 +72,19 @@ export default angular.module('settings.update', [
       }))
     }
 
-    this.configure = (host, port) => {
+    this.configure = (host, port, username, password) => {
       const config = {}
+      if (!this.withAuth) {
+        username = null
+        password = null
+      }
       config.proxyHost = host && host.trim() || null
       config.proxyPort = port && port.trim() || null
+      config.proxyUser = username || null
+      config.proxyPassword = password || null
       return this.updater.configure(config)
       .then(configuration => this.configuration = _assign({}, configuration))
+      .then(() => this.withAuth = Boolean(this.configuration.proxyUser))
       .catch(error => notify.error({
         title: 'XOA Updater',
         message: error.message
