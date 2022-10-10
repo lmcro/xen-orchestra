@@ -1,0 +1,51 @@
+{
+  "name": "xo-server-transport-slack",
+  "version": "0.0.0",
+  "license": "AGPL-3.0-or-later",
+  "description": "xo-server plugin to send messages to Slack/Mattermost",
+  "keywords": [
+    "mattermost",
+    "orchestra",
+    "plugin",
+    "slack",
+    "xen",
+    "xen-orchestra",
+    "xo-server"
+  ],
+  "homepage": "https://github.com/vatesfr/xen-orchestra/tree/master/packages/xo-server-transport-slack",
+  "bugs": "https://github.com/vatesfr/xen-orchestra/issues",
+  "repository": {
+    "directory": "packages/xo-server-transport-slack",
+    "type": "git",
+    "url": "https://github.com/vatesfr/xen-orchestra.git"
+  },
+  "author": {
+    "name": "Vates SAS",
+    "url": "https://vates.fr"
+  },
+  "preferGlobal": false,
+  "main": "dist/",
+  "engines": {
+    "node": ">=6"
+  },
+  "dependencies": {
+    "promise-toolbox": "^0.21.0",
+    "slack-node": "^0.1.8"
+  },
+  "devDependencies": {
+    "@babel/cli": "^7.0.0",
+    "@babel/core": "^7.0.0",
+    "@babel/preset-env": "^7.0.0",
+    "cross-env": "^7.0.2",
+    "rimraf": "^3.0.0"
+  },
+  "scripts": {
+    "build": "cross-env NODE_ENV=production babel --source-maps --out-dir=dist/ src/",
+    "clean": "rimraf dist/",
+    "dev": "cross-env NODE_ENV=development babel --watch --source-maps --out-dir=dist/ src/",
+    "prebuild": "yarn run clean",
+    "predev": "yarn run prebuild",
+    "prepublishOnly": "yarn run build"
+  },
+  "private": true
+}

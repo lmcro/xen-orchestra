@@ -1,0 +1,54 @@
+{
+  "private": false,
+  "name": "xo-import-servers-csv",
+  "version": "1.1.0",
+  "license": "AGPL-3.0-or-later",
+  "description": "CLI to import servers in XO from a CSV file",
+  "keywords": [
+    "csv",
+    "host",
+    "import",
+    "orchestra",
+    "pool",
+    "server",
+    "xen",
+    "xen-orchestra"
+  ],
+  "homepage": "https://github.com/vatesfr/xen-orchestra/tree/master/packages/xo-import-servers-csv",
+  "bugs": "https://github.com/vatesfr/xen-orchestra/issues",
+  "repository": {
+    "directory": "packages/xo-import-servers-csv",
+    "type": "git",
+    "url": "https://github.com/vatesfr/xen-orchestra.git"
+  },
+  "author": {
+    "name": "Vates SAS",
+    "url": "https://vates.fr"
+  },
+  "main": "dist/",
+  "bin": {
+    "xo-import-servers-csv": "dist/index.js"
+  },
+  "preferGlobal": true,
+  "engines": {
+    "node": ">=10"
+  },
+  "dependencies": {
+    "csv-parser": "^3.0.0",
+    "exec-promise": "^0.7.0",
+    "through2": "^4.0.2",
+    "xo-lib": "^0.11.1"
+  },
+  "devDependencies": {
+    "@types/node": "^18.0.1",
+    "@types/through2": "^2.0.31",
+    "typescript": "^4.6.3"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc -w",
+    "prepublishOnly": "yarn run build",
+    "start": "node dist/index.js",
+    "postversion": "npm publish"
+  }
+}

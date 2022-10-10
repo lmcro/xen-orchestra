@@ -1,0 +1,28 @@
+{
+  "private": false,
+  "name": "xo-common",
+  "version": "0.8.0",
+  "license": "AGPL-3.0-or-later",
+  "description": "Code shared between [XO](https://xen-orchestra.com) server and clients",
+  "homepage": "https://github.com/vatesfr/xen-orchestra/tree/master/packages/xo-common",
+  "bugs": "https://github.com/vatesfr/xen-orchestra/issues",
+  "repository": {
+    "directory": "packages/xo-common",
+    "type": "git",
+    "url": "https://github.com/vatesfr/xen-orchestra.git"
+  },
+  "author": {
+    "name": "Vates SAS",
+    "url": "https://vates.fr"
+  },
+  "engines": {
+    "node": ">=6"
+  },
+  "dependencies": {
+    "lodash": "^4.16.6",
+    "make-error": "^1.2.1"
+  },
+  "scripts": {
+    "postversion": "npm publish"
+  }
+}

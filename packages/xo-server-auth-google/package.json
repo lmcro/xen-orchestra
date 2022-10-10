@@ -1,0 +1,49 @@
+{
+  "name": "xo-server-auth-google",
+  "version": "0.2.2",
+  "license": "AGPL-3.0-or-later",
+  "description": "Google authentication plugin for XO-Server",
+  "keywords": [
+    "authentication",
+    "google",
+    "orchestra",
+    "plugin",
+    "xen",
+    "xen-orchestra",
+    "xo-server"
+  ],
+  "homepage": "https://github.com/vatesfr/xen-orchestra/tree/master/packages/xo-server-auth-google",
+  "bugs": "https://github.com/vatesfr/xen-orchestra/issues",
+  "repository": {
+    "directory": "packages/xo-server-auth-google",
+    "type": "git",
+    "url": "https://github.com/vatesfr/xen-orchestra.git"
+  },
+  "author": {
+    "name": "Vates SAS",
+    "url": "https://vates.fr"
+  },
+  "preferGlobal": false,
+  "main": "dist/",
+  "engines": {
+    "node": ">=6"
+  },
+  "dependencies": {
+    "passport-google-oauth20": "^2.0.0"
+  },
+  "devDependencies": {
+    "@babel/cli": "^7.0.0",
+    "@babel/core": "^7.0.0",
+    "@babel/preset-env": "^7.0.0",
+    "cross-env": "^7.0.2",
+    "rimraf": "^3.0.0"
+  },
+  "scripts": {
+    "build": "cross-env NODE_ENV=production babel --source-maps --out-dir=dist/ src/",
+    "dev": "cross-env NODE_ENV=development babel --watch --source-maps --out-dir=dist/ src/",
+    "prebuild": "rimraf dist/",
+    "predev": "yarn run prebuild",
+    "prepublishOnly": "yarn run build"
+  },
+  "private": true
+}

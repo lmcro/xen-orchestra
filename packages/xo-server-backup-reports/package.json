@@ -1,0 +1,58 @@
+{
+  "name": "xo-server-backup-reports",
+  "version": "0.17.0",
+  "license": "AGPL-3.0-or-later",
+  "description": "Backup reports plugin for XO-Server",
+  "keywords": [
+    "backup",
+    "email",
+    "mail",
+    "orchestra",
+    "plugin",
+    "report",
+    "reports",
+    "xen",
+    "xen-orchestra",
+    "xo-server"
+  ],
+  "homepage": "https://github.com/vatesfr/xen-orchestra/tree/master/packages/xo-server-backup-reports",
+  "bugs": "https://github.com/vatesfr/xen-orchestra/issues",
+  "repository": {
+    "directory": "packages/xo-server-backup-reports",
+    "type": "git",
+    "url": "https://github.com/vatesfr/xen-orchestra.git"
+  },
+  "author": {
+    "name": "Vates SAS",
+    "url": "https://vates.fr"
+  },
+  "preferGlobal": false,
+  "main": "dist/",
+  "engines": {
+    "node": ">=6"
+  },
+  "dependencies": {
+    "@xen-orchestra/defined": "^0.0.1",
+    "@xen-orchestra/log": "^0.3.0",
+    "human-format": "^1.0.0",
+    "lodash": "^4.13.1",
+    "moment-timezone": "^0.5.13"
+  },
+  "devDependencies": {
+    "@babel/cli": "^7.0.0",
+    "@babel/core": "^7.0.0",
+    "@babel/preset-env": "^7.8.0",
+    "babel-plugin-lodash": "^3.3.2",
+    "cross-env": "^7.0.2",
+    "rimraf": "^3.0.0"
+  },
+  "scripts": {
+    "build": "cross-env NODE_ENV=production babel --source-maps --out-dir=dist/ src/",
+    "clean": "rimraf dist/",
+    "dev": "cross-env NODE_ENV=development babel --watch --source-maps --out-dir=dist/ src/",
+    "prebuild": "yarn run clean",
+    "predev": "yarn run prebuild",
+    "prepublishOnly": "yarn run build"
+  },
+  "private": true
+}

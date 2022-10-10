@@ -1,10 +1,36 @@
-/bower_components/
-/dist/
+/_book/
+/node_modules/
+/lerna-debug.log
+/lerna-debug.log.*
 
-/node_modules/*
-!/node_modules/*.js
-/node_modules/*.js/
+/@vates/*/dist/
+/@vates/*/node_modules/
+/@xen-orchestra/*/dist/
+/@xen-orchestra/*/node_modules/
+/packages/*/dist/
+/packages/*/node_modules/
 
-jsconfig.json
-.idea
+/packages/xen-api/examples/node_modules/
+/packages/xen-api/plot.dat
+
+/packages/xo-server/.xo-server.*
+/packages/xo-server/src/api/index.mjs
+/packages/xo-server/src/xapi/mixins/index.mjs
+/packages/xo-server/src/xo-mixins/index.mjs
+
+/packages/xo-server-auth-ldap/ldap.cache.conf
+
+/packages/xo-web/src/common/intl/locales/index.js
+/packages/xo-web/src/common/themes/index.js
+
 npm-debug.log
+npm-debug.log.*
+pnpm-debug.log
+pnpm-debug.log.*
+yarn-error.log
+yarn-error.log.*
+.env
+
+# code coverage
+.nyc_output/
+coverage/

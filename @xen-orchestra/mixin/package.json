@@ -1,0 +1,28 @@
+{
+  "private": false,
+  "name": "@xen-orchestra/mixin",
+  "version": "0.1.0",
+  "license": "ISC",
+  "homepage": "https://github.com/vatesfr/xen-orchestra/tree/master/@xen-orchestra/mixin",
+  "bugs": "https://github.com/vatesfr/xen-orchestra/issues",
+  "repository": {
+    "directory": "@xen-orchestra/mixin",
+    "type": "git",
+    "url": "https://github.com/vatesfr/xen-orchestra.git"
+  },
+  "author": {
+    "name": "Vates SAS",
+    "url": "https://vates.fr"
+  },
+  "preferGlobal": false,
+  "engines": {
+    "node": ">=6"
+  },
+  "dependencies": {
+    "bind-property-descriptor": "^2.0.0",
+    "lodash": "^4.17.21"
+  },
+  "scripts": {
+    "postversion": "npm publish"
+  }
+}

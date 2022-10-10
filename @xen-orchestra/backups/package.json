@@ -1,0 +1,58 @@
+{
+  "private": false,
+  "name": "@xen-orchestra/backups",
+  "homepage": "https://github.com/vatesfr/xen-orchestra/tree/master/@xen-orchestra/backups",
+  "bugs": "https://github.com/vatesfr/xen-orchestra/issues",
+  "repository": {
+    "directory": "@xen-orchestra/backups",
+    "type": "git",
+    "url": "https://github.com/vatesfr/xen-orchestra.git"
+  },
+  "version": "0.28.0",
+  "engines": {
+    "node": ">=14.6"
+  },
+  "scripts": {
+    "postversion": "npm publish --access public"
+  },
+  "dependencies": {
+    "@vates/async-each": "^1.0.0",
+    "@vates/cached-dns.lookup": "^1.0.0",
+    "@vates/compose": "^2.1.0",
+    "@vates/decorate-with": "^2.0.0",
+    "@vates/disposable": "^0.1.1",
+    "@vates/fuse-vhd": "^1.0.0",
+    "@vates/parse-duration": "^0.1.1",
+    "@xen-orchestra/async-map": "^0.1.2",
+    "@xen-orchestra/fs": "^3.1.0",
+    "@xen-orchestra/log": "^0.3.0",
+    "@xen-orchestra/template": "^0.1.0",
+    "compare-versions": "^5.0.1",
+    "d3-time-format": "^3.0.0",
+    "decorator-synchronized": "^0.6.0",
+    "end-of-stream": "^1.4.4",
+    "fs-extra": "^10.0.0",
+    "golike-defer": "^0.5.1",
+    "limit-concurrency-decorator": "^0.5.0",
+    "lodash": "^4.17.20",
+    "node-zone": "^0.4.0",
+    "parse-pairs": "^1.1.0",
+    "promise-toolbox": "^0.21.0",
+    "proper-lockfile": "^4.1.2",
+    "uuid": "^9.0.0",
+    "vhd-lib": "^4.1.0",
+    "yazl": "^2.5.1"
+  },
+  "devDependencies": {
+    "rimraf": "^3.0.2",
+    "tmp": "^0.2.1"
+  },
+  "peerDependencies": {
+    "@xen-orchestra/xapi": "^1.5.0"
+  },
+  "license": "AGPL-3.0-or-later",
+  "author": {
+    "name": "Vates SAS",
+    "url": "https://vates.fr"
+  }
+}

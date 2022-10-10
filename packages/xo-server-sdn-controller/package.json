@@ -1,0 +1,45 @@
+{
+  "name": "xo-server-sdn-controller",
+  "description": "Creates pool-wide and cross-pool private networks",
+  "homepage": "https://github.com/vatesfr/xen-orchestra/tree/master/packages/xo-server-sdn-controller",
+  "bugs": "https://github.com/vatesfr/xen-orchestra/issues",
+  "repository": {
+    "directory": "packages/xo-server-sdn-controller",
+    "type": "git",
+    "url": "https://github.com/vatesfr/xen-orchestra.git"
+  },
+  "main": "./dist",
+  "scripts": {
+    "build": "cross-env NODE_ENV=production babel --source-maps --out-dir=dist/ src/",
+    "dev": "cross-env NODE_ENV=development babel --watch --source-maps --out-dir=dist/ src/",
+    "prebuild": "rimraf dist/",
+    "predev": "yarn run prebuild",
+    "prepublishOnly": "yarn run build"
+  },
+  "version": "1.0.5",
+  "engines": {
+    "node": ">=10"
+  },
+  "devDependencies": {
+    "@babel/cli": "^7.4.4",
+    "@babel/core": "^7.4.4",
+    "@babel/preset-env": "^7.8.0",
+    "cross-env": "^7.0.2"
+  },
+  "dependencies": {
+    "@vates/coalesce-calls": "^0.1.0",
+    "@xen-orchestra/log": "^0.3.0",
+    "@xen-orchestra/openflow": "^0.1.2",
+    "ipaddr.js": "^2.0.1",
+    "lodash": "^4.17.11",
+    "node-openssl-cert": "^0.1.34",
+    "promise-toolbox": "^0.21.0",
+    "uuid": "^9.0.0"
+  },
+  "private": true,
+  "license": "AGPL-3.0-or-later",
+  "author": {
+    "name": "Vates SAS",
+    "url": "https://vates.fr"
+  }
+}

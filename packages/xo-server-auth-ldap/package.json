@@ -1,0 +1,56 @@
+{
+  "name": "xo-server-auth-ldap",
+  "version": "0.10.4",
+  "license": "AGPL-3.0-or-later",
+  "description": "LDAP authentication plugin for XO-Server",
+  "keywords": [
+    "ldap",
+    "orchestra",
+    "plugin",
+    "xen",
+    "xen-orchestra",
+    "xo-server"
+  ],
+  "homepage": "https://github.com/vatesfr/xen-orchestra/tree/master/packages/xo-server-auth-ldap",
+  "bugs": "https://github.com/vatesfr/xen-orchestra/issues",
+  "repository": {
+    "directory": "packages/xo-server-auth-ldap",
+    "type": "git",
+    "url": "https://github.com/vatesfr/xen-orchestra.git"
+  },
+  "author": {
+    "name": "Vates SAS",
+    "url": "https://vates.fr"
+  },
+  "preferGlobal": false,
+  "main": "dist/",
+  "bin": {
+    "xo-server-auth-ldap": "dist/test-cli.js"
+  },
+  "engines": {
+    "node": ">=12"
+  },
+  "dependencies": {
+    "@xen-orchestra/log": "^0.3.0",
+    "ensure-array": "^1.0.0",
+    "exec-promise": "^0.7.0",
+    "inquirer": "^8.0.0",
+    "ldapts": "^4.1.0",
+    "promise-toolbox": "^0.21.0"
+  },
+  "devDependencies": {
+    "@babel/cli": "^7.0.0",
+    "@babel/core": "^7.0.0",
+    "@babel/preset-env": "^7.0.0",
+    "cross-env": "^7.0.2",
+    "rimraf": "^3.0.0"
+  },
+  "scripts": {
+    "build": "cross-env NODE_ENV=production babel --source-maps --out-dir=dist/ src/",
+    "dev": "cross-env NODE_ENV=development babel --watch --source-maps --out-dir=dist/ src/",
+    "prebuild": "rimraf dist/",
+    "predev": "yarn run prebuild",
+    "prepublishOnly": "yarn run build"
+  },
+  "private": true
+}

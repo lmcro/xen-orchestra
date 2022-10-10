@@ -1,0 +1,42 @@
+{
+  "name": "xo-server-auth-github",
+  "version": "0.2.2",
+  "license": "AGPL-3.0-or-later",
+  "description": "GitHub authentication plugin for XO-Server",
+  "keywords": [
+    "xo-server",
+    "xo-server",
+    "authentication",
+    "github"
+  ],
+  "homepage": "https://github.com/vatesfr/xen-orchestra/tree/master/packages/xo-server-auth-github",
+  "bugs": "https://github.com/vatesfr/xen-orchestra/issues",
+  "repository": {
+    "directory": "packages/xo-server-auth-github",
+    "type": "git",
+    "url": "https://github.com/vatesfr/xen-orchestra.git"
+  },
+  "author": {
+    "name": "Vates SAS",
+    "url": "https://vates.fr"
+  },
+  "preferGlobal": false,
+  "main": "dist/",
+  "engines": {
+    "node": ">=6"
+  },
+  "dependencies": {
+    "passport-github": "^1.1.0"
+  },
+  "devDependencies": {
+    "@babel/cli": "^7.0.0",
+    "@babel/core": "^7.0.0",
+    "@babel/preset-env": "^7.0.0"
+  },
+  "scripts": {
+    "build": "NODE_ENV=production babel --source-maps --out-dir=dist/ src/",
+    "dev": "NODE_DEV=development babel --watch --source-maps --out-dir=dist/ src/",
+    "prepublishOnly": "yarn run build"
+  },
+  "private": true
+}

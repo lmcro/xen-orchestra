@@ -1,0 +1,31 @@
+{
+  "private": false,
+  "name": "complex-matcher",
+  "version": "0.7.0",
+  "license": "ISC",
+  "description": "Advanced search syntax used in XO",
+  "homepage": "https://github.com/vatesfr/xen-orchestra/tree/master/packages/complex-matcher",
+  "bugs": "https://github.com/vatesfr/xen-orchestra/issues",
+  "repository": {
+    "directory": "packages/complex-matcher",
+    "type": "git",
+    "url": "https://github.com/vatesfr/xen-orchestra.git"
+  },
+  "author": {
+    "name": "Vates SAS",
+    "url": "https://vates.fr"
+  },
+  "preferGlobal": false,
+  "browserslist": [
+    ">2%"
+  ],
+  "engines": {
+    "node": ">=6"
+  },
+  "dependencies": {
+    "lodash": "^4.17.4"
+  },
+  "scripts": {
+    "postversion": "npm publish"
+  }
+}

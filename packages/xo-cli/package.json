@@ -1,0 +1,50 @@
+{
+  "private": false,
+  "name": "xo-cli",
+  "version": "0.14.1",
+  "license": "AGPL-3.0-or-later",
+  "description": "Basic CLI for Xen-Orchestra",
+  "keywords": [
+    "xo",
+    "xen-orchestra",
+    "xen",
+    "orchestra"
+  ],
+  "homepage": "https://github.com/vatesfr/xen-orchestra/tree/master/packages/xo-cli",
+  "bugs": "https://github.com/vatesfr/xen-orchestra/issues",
+  "repository": {
+    "directory": "packages/xo-cli",
+    "type": "git",
+    "url": "https://github.com/vatesfr/xen-orchestra.git"
+  },
+  "author": {
+    "name": "Vates SAS",
+    "url": "https://vates.fr"
+  },
+  "preferGlobal": true,
+  "bin": {
+    "xo-cli": "./index.mjs"
+  },
+  "engines": {
+    "node": ">=14.13"
+  },
+  "dependencies": {
+    "chalk": "^5.0.1",
+    "exec-promise": "^0.7.0",
+    "fs-extra": "^10.0.0",
+    "getopts": "^2.3.0",
+    "http-request-plus": "^0.14.0",
+    "human-format": "^1.0.0",
+    "lodash": "^4.17.4",
+    "micromatch": "^4.0.2",
+    "pretty-ms": "^8.0.0",
+    "progress-stream": "^2.0.0",
+    "promise-toolbox": "^0.21.0",
+    "pw": "^0.0.4",
+    "xdg-basedir": "^5.1.0",
+    "xo-lib": "^0.11.1"
+  },
+  "scripts": {
+    "postversion": "npm publish"
+  }
+}

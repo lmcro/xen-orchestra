@@ -1,0 +1,46 @@
+{
+  "name": "xo-server-load-balancer",
+  "version": "0.7.0",
+  "license": "AGPL-3.0-or-later",
+  "description": "Load balancer for XO-Server",
+  "keywords": [
+    "load",
+    "balancer",
+    "server",
+    "pool",
+    "host"
+  ],
+  "homepage": "https://github.com/vatesfr/xen-orchestra/tree/master/packages/xo-server-load-balancer",
+  "bugs": "https://github.com/vatesfr/xen-orchestra/issues",
+  "repository": {
+    "directory": "packages/xo-server-load-balancer",
+    "type": "git",
+    "url": "https://github.com/vatesfr/xen-orchestra.git"
+  },
+  "author": {
+    "name": "Vates SAS",
+    "url": "https://vates.fr"
+  },
+  "preferGlobal": false,
+  "main": "dist/",
+  "engines": {
+    "node": ">=7"
+  },
+  "dependencies": {
+    "@xen-orchestra/cron": "^1.0.6",
+    "@xen-orchestra/log": "^0.3.0",
+    "lodash": "^4.16.2"
+  },
+  "devDependencies": {
+    "@babel/cli": "^7.0.0",
+    "@babel/core": "^7.0.0",
+    "@babel/preset-env": "^7.0.0",
+    "babel-plugin-lodash": "^3.3.2"
+  },
+  "scripts": {
+    "build": "NODE_ENV=production babel --source-maps --out-dir=dist/ src/",
+    "dev": "NODE_DEV=development babel --watch --source-maps --out-dir=dist/ src/",
+    "prepublishOnly": "yarn run build"
+  },
+  "private": true
+}

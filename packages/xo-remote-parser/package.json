@@ -1,0 +1,44 @@
+{
+  "private": false,
+  "name": "xo-remote-parser",
+  "version": "0.9.1",
+  "license": "AGPL-3.0-or-later",
+  "description": "Parse and format XO remote URLs",
+  "homepage": "https://github.com/vatesfr/xen-orchestra/tree/master/packages/xo-remote-parser",
+  "bugs": "https://github.com/vatesfr/xen-orchestra/issues",
+  "repository": {
+    "directory": "packages/xo-remote-parser",
+    "type": "git",
+    "url": "https://github.com/vatesfr/xen-orchestra.git"
+  },
+  "author": {
+    "name": "Vates SAS",
+    "url": "https://vates.fr"
+  },
+  "preferGlobal": false,
+  "main": "dist/",
+  "engines": {
+    "node": ">=6"
+  },
+  "dependencies": {
+    "lodash": "^4.13.1",
+    "url-parse": "^1.4.7"
+  },
+  "devDependencies": {
+    "@babel/cli": "^7.0.0",
+    "@babel/core": "^7.0.0",
+    "@babel/preset-env": "^7.0.0",
+    "babel-plugin-lodash": "^3.3.2",
+    "cross-env": "^7.0.2",
+    "deep-freeze": "^0.0.1",
+    "rimraf": "^3.0.0"
+  },
+  "scripts": {
+    "build": "cross-env NODE_ENV=production babel --source-maps --out-dir=dist/ src/",
+    "dev": "cross-env NODE_ENV=development babel --watch --source-maps --out-dir=dist/ src/",
+    "prebuild": "rimraf dist/",
+    "predev": "yarn run prebuild",
+    "prepublishOnly": "yarn run build",
+    "postversion": "npm publish"
+  }
+}
