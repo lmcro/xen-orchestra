@@ -230,7 +230,6 @@ export default decorate([
               {map(remoteTypes, (label, key) => _({ key }, label, message => <option value={key}>{message}</option>))}
             </select>
             {type === 'smb' && <em className='text-warning'>{_('remoteSmbWarningMessage')}</em>}
-            {type === 's3' && <em className='text-warning'>Backup to Amazon S3 is a BETA feature</em>}
           </div>
           <div className='form-group'>
             <input
@@ -414,7 +413,7 @@ export default decorate([
                   name='host'
                   onChange={effects.linkState}
                   // pattern='^[^\\/]+\\[^\\/]+$'
-                  placeholder='AWS S3 endpoint (ex: s3.us-east-2.amazonaws.com)'
+                  placeholder={formatMessage(messages.remoteS3PlaceHolderEndpoint)}
                   required
                   type='text'
                   value={host}
@@ -436,8 +435,6 @@ export default decorate([
                   className='form-control'
                   name='bucket'
                   onChange={effects.linkState}
-                  // https://stackoverflow.com/a/58248645/72637
-                  pattern='(?!^(\d{1,3}\.){3}\d{1,3}$)(^[a-z0-9]([a-z0-9-]*(\.[a-z0-9])?)*$)'
                   placeholder={formatMessage(messages.remoteS3PlaceHolderBucket)}
                   required
                   type='text'
@@ -461,7 +458,7 @@ export default decorate([
                   className='form-control'
                   name='username'
                   onChange={effects.linkState}
-                  placeholder='Access key ID'
+                  placeholder={formatMessage(messages.remoteS3PlaceHolderAccessKeyID)}
                   required
                   type='text'
                   value={username}
@@ -472,7 +469,7 @@ export default decorate([
                   className='form-control'
                   name='password'
                   onChange={effects.setSecretKey}
-                  placeholder='Paste secret here to change it'
+                  placeholder={formatMessage(messages.remoteS3PlaceHolderSecret)}
                   autoComplete='off'
                   type='text'
                 />
@@ -480,10 +477,7 @@ export default decorate([
             </fieldset>
           )}
           <div className='form-group'>
-            <label>
-              {_('remoteEncryptionKey')}
-              <span className='tag tag-pill tag-info ml-1'>{_('alpha')}</span>
-            </label>
+            <label>{_('remoteEncryptionKey')}</label>
             {isEncrypted && !useVhdDirectory && (
               <p className='text-warning'>
                 <Icon icon='alarm' /> {_('remoteEncryptionMustUseVhd')}
@@ -495,8 +489,10 @@ export default decorate([
               <li>{_('remoteEncryptionBackupSize')}</li>
             </ul>
             <input
+              autoComplete='new-password'
               className='form-control'
               name='encryptionKey'
+              placeholder={formatMessage(messages.remoteS3PlaceHolderEncryptionKey)}
               onChange={effects.linkState}
               pattern='^.{32}$'
               type='password'

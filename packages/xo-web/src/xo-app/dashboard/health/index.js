@@ -1,5 +1,6 @@
 import _ from 'intl'
 import Component from 'base-component'
+import copy from 'copy-to-clipboard'
 import decorate from 'apply-decorators'
 import { get as getDefined } from '@xen-orchestra/defined'
 import Icon from 'icon'
@@ -148,6 +149,11 @@ const SR_COLUMNS = [
     sortCriteria: sr => sr.SR_type,
   },
   {
+    name: <span className='text-capitalize'>{_('srFree')}</span>,
+    itemRenderer: sr => formatSize(sr.size - sr.physical_usage),
+    sortCriteria: sr => sr.size - sr.physical_usage,
+  },
+  {
     name: _('srSize'),
     itemRenderer: sr => formatSize(sr.size),
     sortCriteria: sr => sr.size,
@@ -244,6 +250,14 @@ const ORPHANED_VDI_ACTIONS = [
   },
 ]
 
+const ORPHANED_VDI_INDIVIDUAL_ACTIONS = [
+  {
+    handler: vdi => copy(vdi.uuid),
+    icon: 'clipboard',
+    label: vdi => _('copyUuid', { uuid: vdi.uuid }),
+  },
+]
+
 const CONTROL_DOMAIN_VDIS_ACTIONS = [
   {
     handler: deleteVbds,
@@ -268,22 +282,21 @@ const AttachedVdisTable = decorate([
     vdiSnapshots: createGetObjectsOfType('VDI-snapshot'),
   }),
   ({ columns, rowTransform }) =>
-    ({ pools, srs, vbds, vdis, vdiSnapshots }) =>
-      (
-        <NoObjects
-          actions={CONTROL_DOMAIN_VDIS_ACTIONS}
-          collection={vbds}
-          columns={columns}
-          component={SortedTable}
-          data-pools={pools}
-          data-srs={srs}
-          data-vdis={vdis}
-          data-vdiSnapshots={vdiSnapshots}
-          emptyMessage={_('noControlDomainVdis')}
-          rowTransform={rowTransform}
-          stateUrlParam='s_controldomain'
-        />
-      ),
+    ({ pools, srs, vbds, vdis, vdiSnapshots }) => (
+      <NoObjects
+        actions={CONTROL_DOMAIN_VDIS_ACTIONS}
+        collection={vbds}
+        columns={columns}
+        component={SortedTable}
+        data-pools={pools}
+        data-srs={srs}
+        data-vdis={vdis}
+        data-vdiSnapshots={vdiSnapshots}
+        emptyMessage={_('noControlDomainVdis')}
+        rowTransform={rowTransform}
+        stateUrlParam='s_controldomain'
+      />
+    ),
   {
     columns: [
       {
@@ -512,7 +525,11 @@ const HANDLED_VDI_TYPES = new Set(['system', 'user', 'ephemeral'])
         Object.assign({}, vdis, snapshotVdis)
       ),
       createSelector(getSrs, srs => vdi => {
-        if (vdi.$VBDs.length !== 0 || !HANDLED_VDI_TYPES.has(vdi.VDI_type)) {
+        if (
+          vdi.$VBDs.length !== 0 || // vdi with a vbd aren't orphans
+          !HANDLED_VDI_TYPES.has(vdi.VDI_type) || // only for vdi with handled types
+          vdi.size === 0 // empty vdi aren't considered as orphans
+        ) {
           return false
         }
 
@@ -634,7 +651,12 @@ export default class Health extends Component {
         const nbHostsPerPool = countBy(hosts, host => host.$pool)
         return filter(selectedPools, pool => {
           const { default_SR } = pool
-          return default_SR !== undefined && !userSrs[default_SR].shared && nbHostsPerPool[pool.id] > 1
+          return (
+            default_SR !== undefined &&
+            userSrs[default_SR] !== undefined &&
+            !userSrs[default_SR].shared &&
+            nbHostsPerPool[pool.id] > 1
+          )
         })
       }
     )
@@ -796,6 +818,7 @@ export default class Health extends Component {
                       collection={orphanVdis}
                       columns={ORPHANED_VDI_COLUMNS}
                       filters={ORPHAN_VDI_FILTERS}
+                      individualActions={ORPHANED_VDI_INDIVIDUAL_ACTIONS}
                       stateUrlParam='s_vdis'
                     />
                   )}

@@ -1739,7 +1739,7 @@ export default {
   // Original text: "To SR:"
   vmImportToSr: '到存储库',
 
-  // Original text: "VMs to import"
+  // Original text: "VM{nVms, plural, one {} other {s}} to import"
   vmsToImport: '导入虚拟机',
 
   // Original text: "Reset"
@@ -2063,12 +2063,6 @@ export default {
 
   // Original text: "Xen Orchestra"
   xenOrchestra: 'Xen Orchestra',
-
-  // Original text: "server"
-  xenOrchestraServer: '服务器',
-
-  // Original text: "web client"
-  xenOrchestraWeb: 'Web客户端',
 
   // Original text: "No pro support provided!"
   noProSupport: '不提供专业支持！',

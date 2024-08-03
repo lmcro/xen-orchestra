@@ -1298,9 +1298,6 @@ export default {
   // Original text: 'Invalid parameters'
   configIpErrorTitle: undefined,
 
-  // Original text: 'IP address and netmask required'
-  configIpErrorMessage: undefined,
-
   // Original text: 'Static IP address'
   staticIp: undefined,
 
@@ -2280,8 +2277,8 @@ export default {
   // Original text: "To SR:"
   vmImportToSr: 'To SR:',
 
-  // Original text: "VMs to import"
-  vmsToImport: 'VMs to import',
+  // Original text: "VM{nVms, plural, one {} other {s}} to import"
+  vmsToImport: 'VM{nVms, plural, one {} other {s}} to import',
 
   // Original text: "Reset"
   importVmsCleanList: 'Reset',
@@ -2298,8 +2295,8 @@ export default {
   // Original text: "Export starting…"
   startVmExport: 'Eksport rozpoczęty…',
 
-  // Original text: "N CPUs"
-  nCpus: 'N CPUs',
+  // Original text: "Number of CPUs"
+  nCpus: undefined,
 
   // Original text: "Memory"
   vmMemory: 'Pamieć',
@@ -2733,12 +2730,6 @@ export default {
 
   // Original text: "Xen Orchestra"
   xenOrchestra: 'Xen Orchestra',
-
-  // Original text: "server"
-  xenOrchestraServer: 'serwer',
-
-  // Original text: "web client"
-  xenOrchestraWeb: 'web klient',
 
   // Original text: "No pro support provided!"
   noProSupport: 'No pro support provided!',

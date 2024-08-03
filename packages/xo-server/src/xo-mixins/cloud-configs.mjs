@@ -3,28 +3,25 @@ import { noSuchObject } from 'xo-common/api-errors.js'
 import Collection from '../collection/redis.mjs'
 import patch from '../patch.mjs'
 
-class CloudConfigs extends Collection {
-  get(properties) {
-    return super.get(properties)
-  }
-}
+class CloudConfigs extends Collection {}
 
 export default class {
   constructor(app) {
     this._app = app
-    const db = (this._db = new CloudConfigs({
-      connection: app._redis,
-      namespace: 'cloudConfig',
-    }))
 
-    app.hooks.on('clean', () => db.rebuildIndexes())
-    app.hooks.on('start', () =>
-      app.addConfigManager(
+    app.hooks.on('clean', () => this._db.rebuildIndexes())
+    app.hooks.on('core started', () => {
+      const db = (this._db = new CloudConfigs({
+        connection: app._redis,
+        namespace: 'cloudConfig',
+      }))
+
+      return app.addConfigManager(
         'cloudConfigs',
         () => db.get(),
         cloudConfigs => db.update(cloudConfigs)
       )
-    )
+    })
   }
 
   createCloudConfig(cloudConfig) {
@@ -34,7 +31,7 @@ export default class {
   async updateCloudConfig({ id, name, template }) {
     const cloudConfig = await this.getCloudConfig(id)
     patch(cloudConfig, { name, template })
-    return this._db.update(cloudConfig)
+    await this._db.update(cloudConfig)
   }
 
   deleteCloudConfig(id) {

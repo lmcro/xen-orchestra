@@ -1,10 +1,10 @@
 import filter from 'lodash/filter.js'
 import forEach from 'lodash/forEach.js'
 import groupBy from 'lodash/groupBy.js'
-import { decorateWith } from '@vates/decorate-with'
+import { decorateObject } from '@vates/decorate-with'
 import { defer } from 'golike-defer'
 
-export default {
+const methods = {
   _connectAllSrPbds(sr) {
     return Promise.all(sr.$PBDs.map(pbd => this._plugPbd(pbd)))
   },
@@ -49,18 +49,19 @@ export default {
     await this._unplugPbd(this.getObject(id))
   },
 
-  _getVdiChainsInfo(uuid, childrenMap, cache) {
+  _getVdiChainsInfo(uuid, childrenMap, cache, resultContainer) {
     let info = cache[uuid]
     if (info === undefined) {
       const children = childrenMap[uuid]
       const unhealthyLength = children !== undefined && children.length === 1 ? 1 : 0
+      resultContainer.nUnhealthyVdis += unhealthyLength
       const vdi = this.getObjectByUuid(uuid, undefined)
       if (vdi === undefined) {
         info = { unhealthyLength, missingParent: uuid }
       } else {
         const parent = vdi.sm_config['vhd-parent']
         if (parent !== undefined) {
-          info = this._getVdiChainsInfo(parent, childrenMap, cache)
+          info = this._getVdiChainsInfo(parent, childrenMap, cache, resultContainer)
           info.unhealthyLength += unhealthyLength
         } else {
           info = { unhealthyLength }
@@ -76,12 +77,13 @@ export default {
     const unhealthyVdis = { __proto__: null }
     const children = groupBy(vdis, 'sm_config.vhd-parent')
     const vdisWithUnknownVhdParent = { __proto__: null }
+    const resultContainer = { nUnhealthyVdis: 0 }
 
     const cache = { __proto__: null }
     forEach(vdis, vdi => {
       if (vdi.managed && !vdi.is_a_snapshot) {
         const { uuid } = vdi
-        const { unhealthyLength, missingParent } = this._getVdiChainsInfo(uuid, children, cache)
+        const { unhealthyLength, missingParent } = this._getVdiChainsInfo(uuid, children, cache, resultContainer)
 
         if (unhealthyLength !== 0) {
           unhealthyVdis[uuid] = unhealthyLength
@@ -95,11 +97,11 @@ export default {
     return {
       vdisWithUnknownVhdParent,
       unhealthyVdis,
+      ...resultContainer,
     }
   },
 
   // This function helps to reattach a forgotten NFS/iSCSI/HBA SR
-  @decorateWith(defer)
   async reattachSr($defer, { uuid, nameLabel, nameDescription, type, deviceConfig }) {
     const srRef = await this.call('SR.introduce', uuid, nameLabel, nameDescription, type, 'user', true, {})
     $defer.onFailure(() => this.forgetSr(srRef))
@@ -122,3 +124,7 @@ export default {
     return sr.uuid
   },
 }
+
+export default decorateObject(methods, {
+  reattachSr: defer,
+})

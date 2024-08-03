@@ -19,17 +19,20 @@ export { default as readVmdkGrainTable, readCapacityAndGrainTable } from './vmdk
 async function vmdkToVhd(vmdkReadStream, grainLogicalAddressList, grainFileOffsetList, gzipped = false, length) {
   const parser = new VMDKDirectParser(vmdkReadStream, grainLogicalAddressList, grainFileOffsetList, gzipped, length)
   const header = await parser.readHeader()
-  return createReadableSparseStream(
+  const vhdStream = await createReadableSparseStream(
     header.capacitySectors * 512,
     header.grainSizeSectors * 512,
     grainLogicalAddressList,
     parser.blockIterator()
   )
+  vhdStream._rawLength = parser.descriptor.extents[0].size
+  return vhdStream
 }
 
 export async function computeVmdkLength(diskName, vhdReadStream) {
   let length = 0
-  for await (const b of await vhdToVMDKIterator(diskName, vhdReadStream)) {
+  const { iterator } = await vhdToVMDKIterator(diskName, vhdReadStream)
+  for await (const b of iterator) {
     length += b.length
   }
   return length
@@ -43,13 +46,15 @@ export async function computeVmdkLength(diskName, vhdReadStream) {
  * @returns a readable stream representing a VMDK file
  */
 export async function vhdToVMDK(diskName, vhdReadStreamGetter, withLength = false) {
+  const { iterator, size } = await vhdToVMDKIterator(diskName, await vhdReadStreamGetter())
   let length
+  const stream = await asyncIteratorToStream(iterator)
   if (withLength) {
-    length = await computeVmdkLength(diskName, await vhdReadStreamGetter())
-  }
-  const iterable = await vhdToVMDKIterator(diskName, await vhdReadStreamGetter())
-  const stream = await asyncIteratorToStream(iterable)
-  if (withLength) {
+    if (size === undefined) {
+      length = await computeVmdkLength(diskName, await vhdReadStreamGetter())
+    } else {
+      length = size
+    }
     stream.length = length
   }
   return stream
@@ -62,8 +67,14 @@ export async function vhdToVMDK(diskName, vhdReadStreamGetter, withLength = fals
  * @returns a readable stream representing a VMDK file
  */
 export async function vhdToVMDKIterator(diskName, vhdReadStream) {
-  const { blockSize, blocks, diskSize, geometry } = await parseVhdToBlocks(vhdReadStream)
-  return generateVmdkData(diskName, diskSize, blockSize, blocks, geometry)
+  const { blockSize, blockCount, blocks, diskSize, geometry } = await parseVhdToBlocks(vhdReadStream)
+
+  const dataSize = blockSize * blockCount
+  const { iterator, metadataSize } = await generateVmdkData(diskName, diskSize, blockSize, blocks, geometry, dataSize)
+  return {
+    iterator,
+    size: dataSize + metadataSize,
+  }
 }
 
 export { ParsableFile, parseOVAFile, vmdkToVhd, writeOvaOn }

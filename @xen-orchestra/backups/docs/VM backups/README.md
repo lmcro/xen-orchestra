@@ -59,13 +59,13 @@ In case any incoherence is detected, the file is deleted so it will be fully gen
 
 ## Attributes
 
-### Of created snapshots
+### Of created snapshots (VMs and associated VDIs)
 
 - `other_config`:
   - `xo:backup:deltaChainLength` = n (number of delta copies/replicated since a full)
   - `xo:backup:exported` = 'true' (added at the end of the backup)
 
-### Of created VMs and snapshots
+### Of created VMs , their associated VDIs and snapshots 
 
 - `other_config`:
   - `xo:backup:datetime`: format is UTC %Y%m%dT%H:%M:%SZ
@@ -75,7 +75,7 @@ In case any incoherence is detected, the file is deleted so it will be fully gen
   - `xo:backup:schedule` = schedule.id
   - `xo:backup:vm` = vm.uuid
 
-### Of created VMs
+### Of created VMs and their associated VDIs
 
 - `name_label`: `${original name} - ${job name} - (${safeDateFormat(backup timestamp)})`
 - tag:
@@ -94,13 +94,13 @@ In case any incoherence is detected, the file is deleted so it will be fully gen
 job.start(data: { mode: Mode, reportWhen: ReportWhen })
 ├─ task.info(message: 'vms', data: { vms: string[] })
 ├─ task.warning(message: string)
-├─ task.start(data: { type: 'VM', id: string })
+├─ task.start(data: { type: 'VM', id: string, name_label?: string })
 │  ├─ task.warning(message: string)
 |  ├─ task.start(message: 'clean-vm')
 │  │  └─ task.end
 │  ├─ task.start(message: 'snapshot')
 │  │  └─ task.end
-│  ├─ task.start(message: 'export', data: { type: 'SR' | 'remote', id: string, isFull: boolean })
+│  ├─ task.start(message: 'export', data: { type: 'SR' | 'remote', id: string, name_label?: string, isFull: boolean })
 │  │  ├─ task.warning(message: string)
 │  │  ├─ task.start(message: 'transfer')
 │  │  │  ├─ task.warning(message: string)
@@ -171,13 +171,16 @@ job:
   # For replication jobs, indicates which SRs to use
   srs: IdPattern
 
-  # Here for historical reasons
-  type: 'backup'
+  type: 'backup' | 'mirrorBackup'
 
-  # Indicates which VMs to backup/replicate
+  # Indicates which VMs to backup/replicate for a xapi to remote backup job
   vms: IdPattern
 
+  # Indicates which remote to read from for a mirror backup job
+  sourceRemote: IdPattern
+
 # Indicates which XAPI to use to connect to a specific VM or SR
+# for remote to remote backup job,this is only needed if there is healtcheck
 recordToXapi:
   [ObjectId]: XapiId
 
@@ -218,7 +221,7 @@ For multiple objects:
 
 ### Settings
 
-Settings are described in [`@xen-orchestra/backups/Backup.js](https://github.com/vatesfr/xen-orchestra/blob/master/%40xen-orchestra/backups/Backup.js).
+Settings are described in [`@xen-orchestra/backups/\_runners/VmsXapi.mjs``](https://github.com/vatesfr/xen-orchestra/blob/master/%40xen-orchestra/backups/_runners/VmsXapi.mjs).
 
 ## Writer API
 
@@ -227,8 +230,9 @@ Settings are described in [`@xen-orchestra/backups/Backup.js](https://github.com
     - `checkBaseVdis(baseUuidToSrcVdi, baseVm)`
     - `prepare({ isFull })`
     - `transfer({ timestamp, deltaExport, sizeContainers })`
+    - `updateUuidAndChain({ isVhdDifferencing, vdis })`
     - `cleanup()`
-    - `healthCheck(sr)`
+    - `healthCheck()` // is not executed if no health check sr or tag doesn't match
   - **Full**
     - `run({ timestamp, sizeContainer, stream })`
 - `afterBackup()`

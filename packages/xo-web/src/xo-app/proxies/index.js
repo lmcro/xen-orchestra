@@ -10,7 +10,7 @@ import React from 'react'
 import SortedTable from 'sorted-table'
 import { adminOnly, ShortDate } from 'utils'
 import { confirm } from 'modal'
-import { groupBy } from 'lodash'
+import groupBy from 'lodash/groupBy.js'
 import { incorrectState } from 'xo-common/api-errors'
 import { provideState, injectState } from 'reaclette'
 import { Text } from 'editable'
@@ -23,6 +23,8 @@ import {
   forgetProxyAppliances,
   getLicenses,
   getProxyApplianceUpdaterState,
+  openTunnelOnProxy,
+  registerProxy,
   subscribeProxies,
   upgradeProxyAppliance,
   EXPIRES_SOON_DELAY,
@@ -36,7 +38,13 @@ import { updateApplianceSettings } from './update-appliance-settings'
 import Tooltip from '../../common/tooltip'
 import { getXoaPlan, SOURCES } from '../../common/xoa-plans'
 
-const _editProxy = (value, { name, proxy }) => editProxyAppliance(proxy, { [name]: value })
+const _editProxy = (value, { name, proxy }) => {
+  if (typeof value === 'string') {
+    value = value.trim()
+    value = value === '' ? null : value
+  }
+  return editProxyAppliance(proxy, { [name]: value })
+}
 
 const HEADER = (
   <h2>
@@ -100,9 +108,16 @@ const INDIVIDUAL_ACTIONS = [
   {
     collapsed: true,
     disabled: ({ vmUuid }) => vmUuid === undefined,
-    handler: (proxy, { upgradeAppliance }) => upgradeAppliance(proxy.id, { ignoreRunningJobs: true }),
+    handler: (proxy, { upgradeAppliance }) => upgradeAppliance(proxy.id, { force: true }),
     icon: 'upgrade',
     label: _('forceUpgrade'),
+    level: 'primary',
+  },
+  {
+    collapsed: true,
+    handler: proxy => openTunnelOnProxy(proxy),
+    icon: 'open-tunnel',
+    label: _('openTunnel'),
     level: 'primary',
   },
   {
@@ -143,8 +158,25 @@ const COLUMNS = [
     name: _('vm'),
   },
   {
+    itemRenderer: proxy => (
+      <Text data-name='address' data-proxy={proxy} value={proxy.address ?? ''} onChange={_editProxy} />
+    ),
+    name: _('address'),
+  },
+  {
     name: _('license'),
     itemRenderer: (proxy, { isAdmin, licensesByVmUuid }) => {
+      if (proxy.vmUuid === undefined) {
+        return (
+          <span className='text-danger'>
+            {_('proxyUnknownVm')}{' '}
+            <a href='https://xen-orchestra.com/' target='_blank' rel='noreferrer'>
+              {_('contactUs')}
+            </a>
+          </span>
+        )
+      }
+
       const licenses = licensesByVmUuid[proxy.vmUuid]
 
       // Proxy bound to multiple licenses
@@ -200,13 +232,7 @@ const COLUMNS = [
       if (state.endsWith('-upgrade-needed')) {
         return (
           <div>
-            <ActionButton
-              btnStyle='success'
-              disabled={proxy.vmUuid === undefined}
-              handler={upgradeAppliance}
-              handlerParam={proxy.id}
-              icon='upgrade'
-            >
+            <ActionButton btnStyle='success' handler={upgradeAppliance} handlerParam={proxy.id} icon='upgrade'>
               {_('upgrade')}
             </ActionButton>
             <p className='text-warning'>
@@ -253,26 +279,47 @@ const Proxies = decorate([
     initialState: () => ({
       upgradesByProxy: {},
       licensesByVmUuid: {},
+      fetchUpgradesTimeout: undefined,
     }),
     effects: {
       async initialize({ fetchProxyUpgrades }) {
-        this.state.licensesByVmUuid = groupBy(await getLicenses({ productType: 'xoproxy' }), 'boundObjectId')
-        return fetchProxyUpgrades(this.props.proxies.map(({ id }) => id))
-      },
-      async fetchProxyUpgrades(effects, proxies) {
-        const upgradesByProxy = { ...this.state.upgradesByProxy }
-        await Promise.all(
-          proxies.map(async id => {
-            upgradesByProxy[id] = await getProxyApplianceUpdaterState(id).catch(e => ({
-              state: 'error',
-              message: _('proxyUpgradesError'),
-            }))
-          })
+        fetchProxyUpgrades()
+
+        this.state.licensesByVmUuid = groupBy(
+          await getLicenses({ productType: 'xoproxy' }).catch(error => {
+            console.warn(error)
+            return []
+          }),
+          'boundObjectId'
         )
-        this.state.upgradesByProxy = upgradesByProxy
+      },
+      finalize() {
+        clearTimeout(this.state.fetchUpgradesTimeout)
+      },
+      async fetchProxyUpgrades({ fetchProxyUpgrades }) {
+        clearTimeout(this.state.fetchUpgradesTimeout)
+
+        try {
+          const upgradesByProxy = { ...this.state.upgradesByProxy }
+          await Promise.all(
+            this.props.proxies.map(async ({ id }) => {
+              upgradesByProxy[id] = await getProxyApplianceUpdaterState(id).catch(e => ({
+                state: 'error',
+                message: _('proxyUpgradesError'),
+              }))
+            })
+          )
+          this.state.upgradesByProxy = upgradesByProxy
+        } catch (error) {
+          console.warn('fetchProxyUpgrades', error)
+        }
+
+        this.state.fetchUpgradesTimeout = setTimeout(fetchProxyUpgrades, 30e3)
       },
       async deployProxy({ fetchProxyUpgrades }, proxy) {
-        return fetchProxyUpgrades([await deployProxy(proxy)])
+        await deployProxy(proxy)
+
+        return fetchProxyUpgrades()
       },
       async upgradeAppliance({ fetchProxyUpgrades }, id, options) {
         try {
@@ -295,7 +342,7 @@ const Proxies = decorate([
 
           await upgradeProxyAppliance(id, { ignoreRunningJobs: true })
         }
-        return fetchProxyUpgrades([id])
+        return fetchProxyUpgrades()
       },
     },
     computed: {
@@ -314,9 +361,20 @@ const Proxies = decorate([
             handler={effects.deployProxy}
             icon='proxy'
             size='large'
-            tooltip={state.isFromSource ? _('deployProxyDisabled') : undefined}
+            tooltip={state.isFromSource ? _('onlyAvailableXoaUsers') : undefined}
           >
             {_('deployProxy')}
+          </ActionButton>
+          <ActionButton
+            className='ml-1'
+            btnStyle='success'
+            disabled={state.isFromSource}
+            handler={registerProxy}
+            icon='connect'
+            size='large'
+            tooltip={state.isFromSource ? _('onlyAvailableXoaUsers') : undefined}
+          >
+            {_('registerProxy')}
           </ActionButton>
         </div>
         <NoObjects

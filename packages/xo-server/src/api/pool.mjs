@@ -1,8 +1,6 @@
+import TTLCache from '@isaacs/ttlcache'
 import { asyncMap } from '@xen-orchestra/async-map'
 import { createLogger } from '@xen-orchestra/log'
-import { createPredicate } from 'value-matcher'
-import { defer as deferrable } from 'golike-defer'
-import { extractIdsFromSimplePattern } from '@xen-orchestra/backups/extractIdsFromSimplePattern.js'
 import { format } from 'json-rpc-peer'
 import { Ref } from 'xen-api'
 import { incorrectState } from 'xo-common/api-errors.js'
@@ -13,25 +11,37 @@ import { moveFirst } from '../_moveFirst.mjs'
 
 const log = createLogger('xo:api:pool')
 
+const TTL_CACHE = 3e4
+const CACHE = new TTLCache({
+  ttl: TTL_CACHE,
+})
+
 // ===================================================================
 
 export async function set({
   pool,
 
+  auto_poweron,
   name_description: nameDescription,
   name_label: nameLabel,
   backupNetwork,
+  migrationCompression,
   migrationNetwork,
   suspendSr,
+  crashDumpSr,
 }) {
   pool = this.getXapiObject(pool)
 
   await Promise.all([
+    auto_poweron !== undefined && pool.update_other_config('auto_poweron', String(auto_poweron)),
     nameDescription !== undefined && pool.set_name_description(nameDescription),
     nameLabel !== undefined && pool.set_name_label(nameLabel),
+    migrationCompression !== undefined && pool.set_migration_compression(migrationCompression),
     migrationNetwork !== undefined && pool.update_other_config('xo:migrationNetwork', migrationNetwork),
     backupNetwork !== undefined && pool.update_other_config('xo:backupNetwork', backupNetwork),
     suspendSr !== undefined && pool.$call('set_suspend_image_SR', suspendSr === null ? Ref.EMPTY : suspendSr._xapiRef),
+    crashDumpSr !== undefined &&
+      pool.$call('set_crash_dump_SR', crashDumpSr === null ? Ref.EMPTY : crashDumpSr._xapiRef),
   ])
 }
 
@@ -39,16 +49,25 @@ set.params = {
   id: {
     type: 'string',
   },
+  auto_poweron: {
+    type: 'boolean',
+    optional: true,
+  },
   name_label: {
     type: 'string',
     optional: true,
   },
   name_description: {
     type: 'string',
+    minLength: 0,
     optional: true,
   },
   backupNetwork: {
     type: ['string', 'null'],
+    optional: true,
+  },
+  migrationCompression: {
+    type: 'boolean',
     optional: true,
   },
   migrationNetwork: {
@@ -59,11 +78,16 @@ set.params = {
     type: ['string', 'null'],
     optional: true,
   },
+  crashDumpSr: {
+    type: ['string', 'null'],
+    optional: true,
+  },
 }
 
 set.resolve = {
   pool: ['id', 'pool', 'administrate'],
   suspendSr: ['suspendSr', 'SR', 'administrate'],
+  crashDumpSr: ['crashDumpSr', 'SR', 'administrate'],
 }
 
 // -------------------------------------------------------------------
@@ -104,6 +128,45 @@ setPoolMaster.resolve = {
 
 // -------------------------------------------------------------------
 
+export async function disableHa({ pool }) {
+  await this.getXapi(pool).disableHa()
+}
+
+disableHa.params = {
+  pool: {
+    type: 'string',
+  },
+}
+
+disableHa.resolve = {
+  pool: ['pool', 'pool', 'administrate'],
+}
+
+// -------------------------------------------------------------------
+
+export async function enableHa({ pool, heartbeatSrs, configuration }) {
+  await this.getXapi(pool).enableHa(heartbeatSrs, configuration)
+}
+
+enableHa.params = {
+  pool: {
+    type: 'string',
+  },
+  heartbeatSrs: {
+    type: 'array',
+    items: { type: 'string' },
+  },
+  configuration: {
+    type: 'object',
+  },
+}
+
+enableHa.resolve = {
+  pool: ['pool', 'pool', 'administrate'],
+}
+
+// -------------------------------------------------------------------
+
 // Returns an array of missing new patches in the host
 // Returns an empty array if up-to-date
 export function listMissingPatches({ host }) {
@@ -123,7 +186,7 @@ listMissingPatches.resolve = {
 // -------------------------------------------------------------------
 
 export async function installPatches({ pool, patches, hosts }) {
-  const opts = { patches }
+  const opts = { patches, xsCredentials: this.apiContext.user.preferences.xsCredentials }
   let xapi
   if (pool !== undefined) {
     pool = this.getXapiObject(pool, 'pool')
@@ -169,7 +232,7 @@ installPatches.description = 'Install patches on hosts'
 
 // -------------------------------------------------------------------
 
-export const rollingUpdate = deferrable(async function ($defer, { bypassBackupCheck = false, pool }) {
+export const rollingUpdate = async function ({ bypassBackupCheck = false, pool }) {
   const poolId = pool.id
   if (bypassBackupCheck) {
     log.warn('pool.rollingUpdate update with argument "bypassBackupCheck" set to true', { poolId })
@@ -177,50 +240,8 @@ export const rollingUpdate = deferrable(async function ($defer, { bypassBackupCh
     await backupGuard.call(this, poolId)
   }
 
-  const [schedules, jobs] = await Promise.all([this.getAllSchedules(), this.getAllJobs('backup')])
-
-  const jobsOfthePool = []
-  jobs.forEach(({ id: jobId, vms }) => {
-    if (vms.id !== undefined) {
-      for (const vmId of extractIdsFromSimplePattern(vms)) {
-        // try/catch to avoid `no such object`
-        try {
-          if (this.getObject(vmId).$poolId === poolId) {
-            jobsOfthePool.push(jobId)
-            break
-          }
-        } catch {}
-      }
-    } else {
-      // Smart mode
-      // For smart mode, we take a simplified approach:
-      // - if smart mode is explicitly 'resident' or 'not resident' on pools, we
-      //   check if it concerns this pool
-      // - if not, the job may concern this pool so we add it to `jobsOfThePool`
-      if (vms.$pool === undefined || createPredicate(vms.$pool)(poolId)) {
-        jobsOfthePool.push(jobId)
-      }
-    }
-  })
-
-  // Disable schedules
-  await Promise.all(
-    schedules
-      .filter(schedule => jobsOfthePool.includes(schedule.jobId) && schedule.enabled)
-      .map(async schedule => {
-        await this.updateSchedule({ ...schedule, enabled: false })
-        $defer(() => this.updateSchedule({ ...schedule, enabled: true }))
-      })
-  )
-
-  // Disable load balancer
-  if ((await this.getOptionalPlugin('load-balancer'))?.loaded) {
-    await this.unloadPlugin('load-balancer')
-    $defer(() => this.loadPlugin('load-balancer'))
-  }
-
-  await this.getXapi(pool).rollingPoolUpdate()
-})
+  await this.rollingPoolUpdate(pool)
+}
 
 rollingUpdate.params = {
   bypassBackupCheck: {
@@ -231,6 +252,31 @@ rollingUpdate.params = {
 }
 
 rollingUpdate.resolve = {
+  pool: ['pool', 'pool', 'administrate'],
+}
+
+// -------------------------------------------------------------------
+
+export async function rollingReboot({ bypassBackupCheck, pool }) {
+  const poolId = pool.id
+  if (bypassBackupCheck) {
+    log.warn('pool.rollingReboot update with argument "bypassBackupCheck" set to true', { poolId })
+  } else {
+    await backupGuard.call(this, poolId)
+  }
+
+  await this.rollingPoolReboot(pool)
+}
+
+rollingReboot.params = {
+  bypassBackupCheck: {
+    default: false,
+    type: 'boolean',
+  },
+  pool: { type: 'string' },
+}
+
+rollingReboot.resolve = {
   pool: ['pool', 'pool', 'administrate'],
 }
 
@@ -290,6 +336,29 @@ getLicenseState.params = {
 
 getLicenseState.resolve = {
   pool: ['pool', 'pool', 'administrate'],
+}
+
+// -------------------------------------------------------------------
+
+export async function getGuestSecureBootReadiness({ pool, forceRefresh }) {
+  const xapi = this.getXapi(pool)
+  const poolRef = pool._xapiRef
+  const xapiMethodName = 'pool.get_guest_secureboot_readiness'
+
+  if (forceRefresh) {
+    CACHE.delete(xapi.computeCacheKey(xapiMethodName, poolRef))
+  }
+
+  return xapi.call(CACHE, xapiMethodName, poolRef)
+}
+
+getGuestSecureBootReadiness.params = {
+  id: { type: 'string' },
+  forceRefresh: { type: 'boolean', default: false },
+}
+
+getGuestSecureBootReadiness.resolve = {
+  pool: ['id', 'pool', null],
 }
 
 // -------------------------------------------------------------------

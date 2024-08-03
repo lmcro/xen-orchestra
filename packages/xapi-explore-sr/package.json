@@ -1,7 +1,7 @@
 {
   "private": false,
   "name": "xapi-explore-sr",
-  "version": "0.4.1",
+  "version": "0.4.4",
   "license": "ISC",
   "description": "Display the list of VDIs (unmanaged and snapshots included) of a SR",
   "keywords": [
@@ -25,9 +25,9 @@
     "url": "https://vates.fr"
   },
   "preferGlobal": true,
-  "main": "dist/",
+  "main": "./index.mjs",
   "bin": {
-    "xapi-explore-sr": "dist/index.js"
+    "xapi-explore-sr": "./index.mjs"
   },
   "engines": {
     "node": ">=8"
@@ -40,22 +40,9 @@
     "human-format": "^1.0.0",
     "lodash": "^4.17.4",
     "pw": "^0.0.4",
-    "xen-api": "^1.2.2"
-  },
-  "devDependencies": {
-    "@babel/cli": "^7.1.5",
-    "@babel/core": "^7.1.5",
-    "@babel/preset-env": "^7.1.5",
-    "babel-plugin-lodash": "^3.2.11",
-    "cross-env": "^7.0.2",
-    "rimraf": "^3.0.0"
+    "xen-api": "^4.2.0"
   },
   "scripts": {
-    "build": "cross-env NODE_ENV=production babel --source-maps --out-dir=dist/ src/",
-    "dev": "cross-env NODE_ENV=development babel --watch --source-maps --out-dir=dist/ src/",
-    "prebuild": "rimraf dist/",
-    "predev": "yarn run prebuild",
-    "prepublishOnly": "yarn run build",
     "postversion": "npm publish"
   }
 }

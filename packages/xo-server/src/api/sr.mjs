@@ -2,10 +2,11 @@ import asyncMapSettled from '@xen-orchestra/async-map/legacy.js'
 import filter from 'lodash/filter.js'
 import isEmpty from 'lodash/isEmpty.js'
 import some from 'lodash/some.js'
+import throttle from 'lodash/throttle.js'
 
 import ensureArray from '../_ensureArray.mjs'
 import { asInteger } from '../xapi/utils.mjs'
-import { debounceWithKey } from '../_pDebounceWithKey.mjs'
+import { destroy as destroyXostor } from './xostor.mjs'
 import { forEach, parseXml } from '../utils.mjs'
 
 // ===================================================================
@@ -29,7 +30,7 @@ set.params = {
 
   name_label: { type: 'string', optional: true },
 
-  name_description: { type: 'string', optional: true },
+  name_description: { type: 'string', minLength: 0, optional: true },
 }
 
 set.resolve = {
@@ -56,6 +57,10 @@ const srIsBackingHa = sr => sr.$pool.ha_enabled && some(sr.$pool.$ha_statefiles,
 // TODO: find a way to call this "delete" and not destroy
 export async function destroy({ sr }) {
   const xapi = this.getXapi(sr)
+  if (sr.SR_type === 'linstor') {
+    await destroyXostor.call(this, { sr })
+    return
+  }
   if (sr.SR_type !== 'xosan') {
     await xapi.destroySr(sr._xapiId)
     return
@@ -187,7 +192,7 @@ export async function createIso({
 createIso.params = {
   host: { type: 'string' },
   nameLabel: { type: 'string' },
-  nameDescription: { type: 'string' },
+  nameDescription: { type: 'string', minLength: 0 },
   path: { type: 'string' },
   type: { type: 'string' },
   user: { type: 'string', optional: true },
@@ -260,7 +265,7 @@ export async function createNfs({
 createNfs.params = {
   host: { type: 'string' },
   nameLabel: { type: 'string' },
-  nameDescription: { type: 'string' },
+  nameDescription: { type: 'string', minLength: 0 },
   server: { type: 'string' },
   serverPath: { type: 'string' },
   nfsVersion: { type: 'string', optional: true },
@@ -272,6 +277,50 @@ createNfs.resolve = {
   host: ['host', 'host', 'administrate'],
 }
 
+export async function createSmb({ host, nameLabel, nameDescription, server, user, password, srUuid }) {
+  const xapi = this.getXapi(host)
+
+  const deviceConfig = {
+    server,
+    username: user,
+    password,
+  }
+
+  if (srUuid !== undefined) {
+    return xapi.reattachSr({
+      uuid: srUuid,
+      nameLabel,
+      nameDescription,
+      type: 'smb',
+      deviceConfig,
+    })
+  }
+
+  const srRef = await xapi.SR_create({
+    device_config: deviceConfig,
+    host: host._xapiRef,
+    name_description: nameDescription,
+    name_label: nameLabel,
+    shared: true,
+    type: 'smb',
+  })
+
+  return xapi.getField('SR', srRef, 'uuid')
+}
+
+createSmb.params = {
+  host: { type: 'string' },
+  nameLabel: { type: 'string' },
+  nameDescription: { type: 'string', minLength: 0, default: '' },
+  server: { type: 'string' },
+  srUuid: { type: 'string', optional: true },
+  user: { type: 'string', optional: true },
+  password: { type: 'string', optional: true },
+}
+
+createSmb.resolve = {
+  host: ['host', 'host', 'administrate'],
+}
 // -------------------------------------------------------------------
 // HBA SR
 
@@ -311,7 +360,7 @@ export async function createHba({ host, nameLabel, nameDescription, scsiId, srUu
 createHba.params = {
   host: { type: 'string' },
   nameLabel: { type: 'string' },
-  nameDescription: { type: 'string' },
+  nameDescription: { type: 'string', minLength: 0 },
   scsiId: { type: 'string' },
   srUuid: { type: 'string', optional: true },
 }
@@ -348,7 +397,7 @@ export async function createLvm({ host, nameLabel, nameDescription, device }) {
 createLvm.params = {
   host: { type: 'string' },
   nameLabel: { type: 'string' },
-  nameDescription: { type: 'string' },
+  nameDescription: { type: 'string', minLength: 0 },
   device: { type: 'string' },
 }
 
@@ -384,7 +433,7 @@ export async function createExt({ host, nameLabel, nameDescription, device }) {
 createExt.params = {
   host: { type: 'string' },
   nameLabel: { type: 'string' },
-  nameDescription: { type: 'string' },
+  nameDescription: { type: 'string', minLength: 0 },
   device: { type: 'string' },
 }
 
@@ -456,7 +505,7 @@ export async function createZfs({ host, nameLabel, nameDescription, location }) 
 createZfs.params = {
   host: { type: 'string' },
   nameLabel: { type: 'string' },
-  nameDescription: { type: 'string' },
+  nameDescription: { type: 'string', minLength: 0 },
   location: { type: 'string' },
 }
 
@@ -467,10 +516,11 @@ createZfs.resolve = {
 // This function helps to detect all NFS shares (exports) on a NFS server
 // Return a table of exports with their paths and ACLs
 
-export async function probeNfs({ host, server }) {
+export async function probeNfs({ host, nfsVersion, server }) {
   const xapi = this.getXapi(host)
 
   const deviceConfig = {
+    nfsversion: nfsVersion,
     server,
   }
 
@@ -501,6 +551,7 @@ export async function probeNfs({ host, server }) {
 
 probeNfs.params = {
   host: { type: 'string' },
+  nfsVersion: { type: 'string', optional: true },
   server: { type: 'string' },
 }
 
@@ -533,6 +584,7 @@ export async function probeHba({ host }) {
     hbaDevices.push({
       hba: hbaDevice.hba.trim(),
       id: hbaDevice.id.trim(),
+      lun: +hbaDevice.lun.trim(),
       path: hbaDevice.path.trim(),
       scsiId: hbaDevice.SCSIid.trim(),
       serial: hbaDevice.serial.trim(),
@@ -616,7 +668,7 @@ export async function createIscsi({
 createIscsi.params = {
   host: { type: 'string' },
   nameLabel: { type: 'string' },
-  nameDescription: { type: 'string' },
+  nameDescription: { type: 'string', minLength: 0 },
   target: { type: 'string' },
   port: { type: 'integer', optional: true },
   targetIqn: { type: 'string' },
@@ -837,10 +889,11 @@ probeHbaExists.resolve = {
 // This function helps to detect if this NFS SR already exists in XAPI
 // It returns a table of SR UUID, empty if no existing connections
 
-export async function probeNfsExists({ host, server, serverPath }) {
+export async function probeNfsExists({ host, nfsVersion, server, serverPath }) {
   const xapi = this.getXapi(host)
 
   const deviceConfig = {
+    nfsversion: nfsVersion,
     server,
     serverpath: serverPath,
   }
@@ -859,6 +912,7 @@ export async function probeNfsExists({ host, server, serverPath }) {
 
 probeNfsExists.params = {
   host: { type: 'string' },
+  nfsVersion: { type: 'string', optional: true },
   server: { type: 'string' },
   serverPath: { type: 'string' },
 }
@@ -869,16 +923,26 @@ probeNfsExists.resolve = {
 
 // -------------------------------------------------------------------
 
-export const getAllUnhealthyVdiChainsLength = debounceWithKey(function getAllUnhealthyVdiChainsLength() {
-  const unhealthyVdiChainsLengthBySr = {}
-  filter(this.objects.all, obj => obj.type === 'SR' && obj.content_type !== 'iso' && obj.size > 0).forEach(sr => {
-    const unhealthyVdiChainsLengthByVdi = this.getXapi(sr).getVdiChainsInfo(sr)
-    if (!isEmpty(unhealthyVdiChainsLengthByVdi)) {
-      unhealthyVdiChainsLengthBySr[sr.uuid] = unhealthyVdiChainsLengthByVdi
-    }
-  })
-  return unhealthyVdiChainsLengthBySr
-}, 60e3)
+export const getAllUnhealthyVdiChainsLength = throttle(
+  function getAllUnhealthyVdiChainsLength() {
+    const unhealthyVdiChainsLengthBySr = {}
+    filter(this.objects.all, obj => obj.type === 'SR' && obj.content_type !== 'iso' && obj.size > 0).forEach(sr => {
+      const unhealthyVdiChainsLengthByVdi = this.getXapi(sr).getVdiChainsInfo(sr)
+      if (!isEmpty(unhealthyVdiChainsLengthByVdi)) {
+        unhealthyVdiChainsLengthBySr[sr.uuid] = unhealthyVdiChainsLengthByVdi
+      }
+    })
+    return unhealthyVdiChainsLengthBySr
+  },
+  60e3,
+  { leading: true, trailing: false }
+)
+
+// remove lodash's method which will be refused by XO's addApiMethod()
+delete getAllUnhealthyVdiChainsLength.cancel
+delete getAllUnhealthyVdiChainsLength.flush
+
+getAllUnhealthyVdiChainsLength.permission = 'admin'
 
 // -------------------------------------------------------------------
 
@@ -946,5 +1010,21 @@ disableMaintenanceMode.params = {
 disableMaintenanceMode.permission = 'admin'
 
 disableMaintenanceMode.resolve = {
+  sr: ['id', 'SR', 'operate'],
+}
+
+// -------------------------------------------------------------------
+
+export async function reclaimSpace({ sr }) {
+  await this.getXapiObject(sr).$reclaimSpace()
+}
+
+reclaimSpace.description = 'reclaim freed space on SR'
+
+reclaimSpace.params = {
+  id: { type: 'string' },
+}
+
+reclaimSpace.resolve = {
   sr: ['id', 'SR', 'operate'],
 }

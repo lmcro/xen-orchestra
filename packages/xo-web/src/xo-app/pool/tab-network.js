@@ -1,23 +1,22 @@
 import _ from 'intl'
 import ActionRowButton from 'action-row-button'
 import BaseComponent from 'base-component'
-import Button from 'button'
 import ButtonGroup from 'button-group'
 import copy from 'copy-to-clipboard'
 import Icon from 'icon'
 import isEmpty from 'lodash/isEmpty'
-import map from 'lodash/map'
 import React, { Component } from 'react'
 import some from 'lodash/some'
 import SortedTable from 'sorted-table'
+import PifsColumn from 'sorted-table/pifs-column'
 import Tooltip, { conditionalTooltip } from 'tooltip'
 import { connectStore } from 'utils'
 import { Container, Row, Col } from 'grid'
 import { TabButtonLink } from 'tab-button'
 import { Text, Number } from 'editable'
-import { Toggle } from 'form'
+import { Select, Toggle } from 'form'
 import { createFinder, createGetObject, createGetObjectsOfType, createSelector } from 'selectors'
-import { connectPif, deleteNetwork, disconnectPif, editNetwork, editPif } from 'xo'
+import { deleteNetwork, editNetwork, editPif } from 'xo'
 
 // =============================================================================
 
@@ -84,6 +83,16 @@ class Description extends Component {
 
 // -----------------------------------------------------------------------------
 
+class Mtu extends Component {
+  _editMtu = value => editNetwork(this.props.network, { mtu: value })
+
+  render() {
+    const { network } = this.props
+
+    return <Number value={network.MTU} onChange={this._editMtu} />
+  }
+}
+
 @connectStore(() => ({
   defaultPif: _createGetDefaultPif(),
 }))
@@ -98,6 +107,47 @@ class DefaultPif extends BaseComponent {
     }
 
     return <span>{defaultPif.device}</span>
+  }
+}
+
+class Nbd extends Component {
+  NBD_FILTER_OPTIONS = [
+    {
+      labelId: 'noNbdConnection',
+      value: false,
+    },
+    {
+      labelId: 'nbdConnection',
+      value: true,
+    },
+  ]
+  INSECURE_OPTION = [
+    {
+      labelId: 'insecureNbdConnection',
+      value: 'insecure_nbd',
+      disabled: true,
+    },
+  ]
+
+  _getOptionRenderer = ({ labelId }) => _(labelId)
+
+  _editNbdConnection = value => {
+    editNetwork(this.props.network, { nbd: value.value })
+  }
+
+  render() {
+    const { network } = this.props
+
+    return (
+      <Select
+        onChange={this._editNbdConnection}
+        optionRenderer={this._getOptionRenderer}
+        // We chose not to show the unsecure_nbd option unless the user has already activated it through another client.
+        // The reason is that we don't want them to know about it since the option is not allowed in XO.
+        options={network.insecureNbd ? [...this.NBD_FILTER_OPTIONS, ...this.INSECURE_OPTION] : this.NBD_FILTER_OPTIONS}
+        value={network.nbd ? true : network.insecureNbd ? 'insecure_nbd' : false}
+      />
+    )
   }
 }
 
@@ -143,87 +193,6 @@ class ToggleDefaultLockingMode extends Component {
     return conditionalTooltip(
       <Toggle disabled={isInUse} onChange={this._editDefaultIsLocked} value={network.defaultIsLocked} />,
       isInUse ? _('networkInUse') : undefined
-    )
-  }
-}
-
-// -----------------------------------------------------------------------------
-
-@connectStore(() => {
-  const pif = createGetObject()
-  const host = createGetObject(createSelector(pif, pif => pif.$host))
-  const disableUnplug = createSelector(
-    pif,
-    pif => pif.attached && !pif.isBondMaster && (pif.management || pif.disallowUnplug)
-  )
-
-  return { host, pif, disableUnplug }
-})
-class PifItem extends Component {
-  render() {
-    const { pif, host, disableUnplug } = this.props
-
-    return (
-      <tr>
-        <td>{pif.device}</td>
-        <td>{host.name_label}</td>
-        <td>{pif.ip}</td>
-        <td>{pif.mac}</td>
-        <td>
-          {pif.carrier ? (
-            <span className='tag tag-success'>{_('poolNetworkPifAttached')}</span>
-          ) : (
-            <span className='tag tag-default'>{_('poolNetworkPifDetached')}</span>
-          )}
-        </td>
-        <td className='text-xs-right'>
-          <ButtonGroup>
-            <ActionRowButton
-              disabled={disableUnplug}
-              handler={pif.attached ? disconnectPif : connectPif}
-              handlerParam={pif}
-              icon={pif.attached ? 'disconnect' : 'connect'}
-              tooltip={pif.attached ? _('disconnectPif') : _('connectPif')}
-            />
-          </ButtonGroup>
-        </td>
-      </tr>
-    )
-  }
-}
-
-class PifsItem extends BaseComponent {
-  render() {
-    const { network } = this.props
-    const { showPifs } = this.state
-
-    return (
-      <div>
-        <Tooltip content={showPifs ? _('hidePifs') : _('showPifs')}>
-          <Button size='small' className='mb-1 pull-right' onClick={this.toggleState('showPifs')}>
-            <Icon icon={showPifs ? 'hidden' : 'shown'} />
-          </Button>
-        </Tooltip>
-        {showPifs && (
-          <table className='table'>
-            <thead className='thead-default'>
-              <tr>
-                <th>{_('pifDeviceLabel')}</th>
-                <th>{_('homeTypeHost')}</th>
-                <th>{_('pifAddressLabel')}</th>
-                <th>{_('pifMacLabel')}</th>
-                <th>{_('pifStatusLabel')}</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {map(network.PIFs, pifId => (
-                <PifItem key={pifId} id={pifId} />
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
     )
   }
 }
@@ -289,7 +258,12 @@ const NETWORKS_COLUMNS = [
   },
   {
     name: _('poolNetworkMTU'),
-    itemRenderer: network => network.MTU,
+    itemRenderer: network => <Mtu network={network} />,
+  },
+
+  {
+    itemRenderer: network => <Nbd network={network} />,
+    name: <Tooltip content={_('nbdTootltip')}>{_('nbd')}</Tooltip>,
   },
   {
     name: (
@@ -303,7 +277,7 @@ const NETWORKS_COLUMNS = [
   },
   {
     name: _('poolNetworkPif'),
-    itemRenderer: network => !isEmpty(network.PIFs) && <PifsItem network={network} />,
+    itemRenderer: network => !isEmpty(network.PIFs) && <PifsColumn network={network} />,
   },
   {
     name: _('poolNetworkAutomatic'),

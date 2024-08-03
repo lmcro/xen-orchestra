@@ -109,17 +109,39 @@ In the "Settings" then "Plugins" view, expand the SAML plugin configuration. The
 
 Save the configuration and then activate the plugin (button on top).
 
+#### Vendor specific
+
+##### Google Workspace - SAML [support.google.com](https://support.google.com/a/answer/6087519?hl=en#zippy=)
+
+Use the screenshots below as a reference as how to setup SAML with Google Workspace.
+
+
+> Note: Right now even when the authorization is successfull, you will be redirected to the `https://xo.company.net/signin` page. However, just browse directly into the bare URL `https://xo.company.net`, and you'll now be logged in and can use the XO-dashboard.
+
+The first login will create the user inside XO, as a non-privileged user. An administrator then has to promote the user to the apropriate group. (XO: Settings/Users).
+
+![](./assets/saml-googleworkspace1.png)
+
+Also make sure to adjust the SAML attribute mapping in the Google Workspace configuration. (Primary email -> email)
+![](./assets/saml-googleworkspace2.png)
+
 ### GitHub
 
-This plugin allows GitHub users to authenticate to Xen-Orchestra.
+This plugin allows any GitHub user to authenticate to Xen Orchestra.
 
-The first time a user signs in, XO will create a new XO user with the same identifier, without any permissions.
+The first time a user signs in, XO will create a new XO user with the same identifier (i.e. GitHub name), with _user_ permissions. An existing admin will need to apply the appropriate permissions for your environment.
 
-First you need to configure a new app in your GitHub account:
+First you need to configure a new app in your GitHub account. Go to your Github settings > "Developer Settings" > "OAuth Apps" > "New OAuth App".
 
-![](https://raw.githubusercontent.com/vatesfr/xen-orchestra/master/packages/xo-server-auth-github/github.png)
+1. Name your GitHub application under "Application Name".
+2. Enter your Xen Orchestra URL (or IP) under "Homepage URL"
+3. Add your "Authorization callback URL" (for example, https://homepageUrl/signin/github/callback)
 
-When you get your `clientID` and your `clientSecret`, you can configure them in the GitHub Plugin inside the "Settings/Plugins" view of Xen Orchestra.
+![](./assets/auth-github-form.png)
+
+When you get your Client ID and your Client secret, you can configure them in the GitHub Plugin inside the "Settings/Plugins" view of Xen Orchestra.
+
+![](./assets/auth-github-secret.png)
 
 Be sure to activate the plugin after you save the configuration (button on top). When it's done, you'll see a link in the login view, this is where you'll go to authenticate:
 
@@ -249,7 +271,7 @@ To create a new set of resources to delegate, go to the "Self Service" section i
 Only an admin can create a set of resources
 :::
 
-To allow people to create VMs as they want, we need to give them a _part_ of your XenServer resources (disk space, CPUs, RAM). You can call this "general quotas" if you like. But you first need to decide which resources will be used.
+To allow people to create VMs as they want, we need to give them a _part_ of your XCP-ng/XenServer resources (disk space, CPUs, RAM). You can call this "general quotas" if you like. But you first need to decide which resources will be used.
 
 In this example below, we'll create a set called **"sandbox"** with:
 
@@ -347,4 +369,4 @@ Now, the audit plugin will record users' actions and upload the last record in t
 
 ## Debugging
 
-If you can't log in, please check the logs of `xo-server` while you attempt to connect. It will give you hints about the error encountered. You can do that with a `tail -f /var/log/syslog -n 100` on your XOA.
+If you can't log in, please [check the logs of `xo-server`](https://xen-orchestra.com/docs/troubleshooting.html#logs).

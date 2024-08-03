@@ -1,3 +1,4 @@
+import * as CM from 'complex-matcher'
 import asyncIteratorToStream from 'async-iterator-to-stream'
 import { alteredAuditRecord, missingAuditRecord } from 'xo-common/api-errors'
 import { createGzip } from 'zlib'
@@ -12,6 +13,7 @@ const log = createLogger('xo:xo-server-audit')
 const DEFAULT_BLOCKED_LIST = {
   'acl.get': true,
   'acl.getCurrentPermissions': true,
+  'api.getConnections': true,
   'audit.checkIntegrity': true,
   'audit.clean': true,
   'audit.deleteRange': true,
@@ -20,28 +22,47 @@ const DEFAULT_BLOCKED_LIST = {
   'backup.list': true,
   'backupNg.getAllJobs': true,
   'backupNg.getAllLogs': true,
+  'backupNg.getJob': true,
+  'backupNg.getLogs': true,
+  'backupNg.getSuggestedExcludedTags': true,
   'backupNg.listVmBackups': true,
   'cloud.getResourceCatalog': true,
   'cloudConfig.getAll': true,
+  'cloudConfig.getAllNetworkConfigs': true,
   'group.getAll': true,
+  'host.getSchedulerGranularity': true,
   'host.isHostServerTimeConsistent': true,
   'host.isHyperThreadingEnabled': true,
   'host.stats': true,
   'ipPool.getAll': true,
+  'job.get': true,
   'job.getAll': true,
   'log.get': true,
   'metadataBackup.getAllJobs': true,
+  'metadataBackup.getJob': true,
+  'mirrorBackup.getAllJobs': true,
+  'mirrorBackup.getJob': true,
+  'netdata.getHostApiKey': true,
+  'netdata.getLocalApiKey': true,
   'network.getBondModes': true,
   'pif.getIpv4ConfigurationModes': true,
+  'pif.getIpv6ConfigurationModes': true,
   'plugin.get': true,
+  'pool.getGuestSecureBootReadiness': true,
+  'pool.getLicenseState': true,
+  'pool.getPatchesDifference': true,
   'pool.listMissingPatches': true,
+  'proxy.get': true,
   'proxy.getAll': true,
   'proxy.getApplianceUpdaterState': true,
+  'remote.get': true,
   'remote.getAll': true,
   'remote.getAllInfo': true,
   'remote.list': true,
+  'resourceSet.get': true,
   'resourceSet.getAll': true,
   'role.getAll': true,
+  'schedule.get': true,
   'schedule.getAll': true,
   'server.getAll': true,
   'session.getUser': true,
@@ -52,8 +73,15 @@ const DEFAULT_BLOCKED_LIST = {
   'system.getMethodsInfo': true,
   'system.getServerTimezone': true,
   'system.getServerVersion': true,
+  'system.getVersion': true,
+  'tag.getAllConfigured': true,
+  'test.getPermissionsForUser': true,
   'user.getAll': true,
+  'user.getAuthenticationTokens': true,
+  'vif.getLockingModeValues': true,
+  'vm.getCloudInitConfig': true,
   'vm.getHaValues': true,
+  'vm.getSecurebootReadiness': true,
   'vm.stats': true,
   'xo.getAllObjects': true,
   'xoa.check': true,
@@ -253,6 +281,41 @@ class AuditXoPlugin {
           getRecords,
         },
       })
+    )
+
+    cleaners.push(
+      this._xo.registerRestApi(
+        {
+          records: {
+            ':id': {
+              _get: async (req, _, next) => {
+                const record = await this._auditCore.get(req.params.id)
+                if (record !== undefined) {
+                  return record
+                }
+                next()
+              },
+            },
+
+            _get: async function* ({ query }) {
+              const limit = query.limit === undefined ? Infinity : +query.limit
+              const filter = query.filter === undefined ? () => true : CM.parse(query.filter).createPredicate()
+
+              let i = 0
+              for await (const record of this._auditCore.getFrom(query.from)) {
+                if (++i > limit) {
+                  break
+                }
+
+                if (filter(record)) {
+                  yield record
+                }
+              }
+            }.bind(this),
+          },
+        },
+        '/plugins/audit'
+      )
     )
   }
 

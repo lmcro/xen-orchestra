@@ -452,11 +452,19 @@ const NoObjects = props =>
     (hosts, pools) => ({ ...hosts, ...pools })
   )
   const getItems = createSelector(getContainers, createGetObjectsOfType(getType), (containers, items) =>
-    mapValues(items, item => ({
-      ...item,
-      container: containers[item.$container || item.$pool],
-      physicalUsageBySize: item.type === 'SR' ? (item.size > 0 ? item.physical_usage / item.size : 0) : undefined,
-    }))
+    mapValues(items, item =>
+      // ComplexMatcher works on own enumerable properties, therefore the
+      // injected properties should be non-enumerable
+      Object.defineProperties(
+        { ...item },
+        {
+          container: { value: containers[item.$container || item.$pool] },
+          physicalUsageBySize: {
+            value: item.type === 'SR' ? (item.size > 0 ? item.physical_usage / item.size : 0) : undefined,
+          },
+        }
+      )
+    )
   )
   // VMs are handled separately because we need to inject their 'vdisUsage'
   const getVms = createSelector(
@@ -465,11 +473,17 @@ const NoObjects = props =>
     createGetObjectsOfType('VBD'),
     createGetObjectsOfType('VDI'),
     (containers, vms, vbds, vdis) =>
-      mapValues(vms, vm => ({
-        ...vm,
-        container: containers[vm.$container || vm.$pool],
-        vdisUsage: sumBy(compact(map(vm.$VBDs, vbdId => get(() => vdis[vbds[vbdId].VDI]))), 'usage'),
-      }))
+      mapValues(vms, vm =>
+        // ComplexMatcher works on own enumerable properties, therefore the
+        // injected properties should be non-enumerable
+        Object.defineProperties(
+          { ...vm },
+          {
+            container: { value: containers[vm.$container || vm.$pool] },
+            vdisUsage: { value: sumBy(compact(map(vm.$VBDs, vbdId => get(() => vdis[vbds[vbdId].VDI]))), 'usage') },
+          }
+        )
+      )
   )
 
   return (state, props) => {
@@ -541,6 +555,11 @@ export default class Home extends Component {
   _setNItemsPerPage(nItems) {
     this.setState({ homeItemsPerPage: nItems })
     cookies.set('homeItemsPerPage', nItems)
+
+    // changing the number of items per page should send back to the first page
+    //
+    // see https://github.com/vatesfr/xen-orchestra/issues/7350
+    this._onPageSelection(1)
   }
 
   _getPage() {
@@ -798,7 +817,7 @@ export default class Home extends Component {
         ? ComplexMatcher.setPropertyClause(
             filter,
             'tags',
-            new ComplexMatcher.Or(map(tags, tag => new ComplexMatcher.RegExp(`^${escapeRegExp(tag.id)}$`, 'i')))
+            new ComplexMatcher.Or(map(tags, tag => new ComplexMatcher.RegExp(`^${escapeRegExp(tag.id)}$`)))
           )
         : ComplexMatcher.setPropertyClause(filter, 'tags', undefined)
     )

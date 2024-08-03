@@ -1,3 +1,4 @@
+import * as xoData from '@xen-orchestra/xapi/xoData.mjs'
 import find from 'lodash/find.js'
 import gte from 'lodash/gte.js'
 import includes from 'lodash/includes.js'
@@ -6,12 +7,12 @@ import lte from 'lodash/lte.js'
 import mapToArray from 'lodash/map.js'
 import mapValues from 'lodash/mapValues.js'
 import noop from 'lodash/noop.js'
-import { decorateWith } from '@vates/decorate-with'
+import { decorateObject } from '@vates/decorate-with'
 import { defer as deferrable } from 'golike-defer'
 import { ignoreErrors, pCatch } from 'promise-toolbox'
 import { Ref } from 'xen-api'
 
-import { forEach, parseSize } from '../../utils.mjs'
+import { parseSize } from '../../utils.mjs'
 
 import { isVmHvm, isVmRunning, makeEditObject } from '../utils.mjs'
 
@@ -22,9 +23,8 @@ const XEN_VIDEORAM_VALUES = [1, 2, 4, 8, 16]
 // handle MEMORY_CONSTRAINT_VIOLATION and derivatives like MEMORY_CONSTRAINT_VIOLATION_MAXPIN
 const isMemoryConstraintError = e => e.code.startsWith('MEMORY_CONSTRAINT_VIOLATION')
 
-export default {
+const methods = {
   // TODO: clean up on error.
-  @decorateWith(deferrable)
   async createVm(
     $defer,
     templateId,
@@ -38,10 +38,6 @@ export default {
       vifs = undefined,
       existingVdis = undefined,
 
-      coreOs = false,
-      cloudConfig = undefined,
-      networkConfig = undefined,
-
       vgpuType = undefined,
       gpuGroup = undefined,
 
@@ -49,7 +45,8 @@ export default {
 
       ...props
     } = {},
-    checkLimits
+    checkLimits,
+    creatorId
   ) {
     const installMethod = (() => {
       if (installRepository == null) {
@@ -92,7 +89,15 @@ export default {
     // installation.
     await this.callAsync('VM.provision', vmRef)
 
-    let vm = await this._getOrWaitObject(vmRef)
+    const vm = await this._getOrWaitObject(vmRef)
+
+    await xoData.set(vm, {
+      creation: {
+        date: new Date().toISOString(),
+        template: template.uuid,
+        user: creatorId,
+      },
+    })
 
     // Set VMs params.
     await this._editVm(vm, props, checkLimits)
@@ -210,28 +215,6 @@ export default {
 
     if (vgpuType !== undefined && gpuGroup !== undefined) {
       await this.createVgpu(vm, gpuGroup, vgpuType)
-    }
-
-    if (cloudConfig != null) {
-      // Refresh the record.
-      await this.barrier(vm.$ref)
-      vm = this.getObjectByRef(vm.$ref)
-
-      // Find the SR of the first VDI.
-      let srRef
-      forEach(vm.$VBDs, vbd => {
-        let vdi
-        if (vbd.type === 'Disk' && (vdi = vbd.$VDI)) {
-          srRef = vdi.SR
-          return false
-        }
-      })
-
-      if (coreOs) {
-        await this.createCoreOsCloudInitConfigDrive(vm.$id, srRef, cloudConfig)
-      } else {
-        await this.createCloudInitConfigDrive(vm.$id, srRef, cloudConfig, networkConfig)
-      }
     }
 
     // wait for the record with all the VBDs and VIFs
@@ -399,6 +382,11 @@ export default {
 
     nameLabel: true,
 
+    notes: {
+      get: vm => vm.other_config['xo:notes'],
+      set: (value, vm) => vm.update_other_config('xo:notes', value),
+    },
+
     PV_args: true,
 
     tags: true,
@@ -429,6 +417,9 @@ export default {
         }
         return vm.update_platform('videoram', String(videoram))
       },
+    },
+    viridian: {
+      set: (viridian, vm) => vm.update_platform('viridian', viridian ? 'true' : null),
     },
 
     startDelay: {
@@ -481,3 +472,7 @@ export default {
     return this.callAsync(`VM.${hard ? 'hard' : 'clean'}_shutdown`, this.getObject(vmId).$ref).then(noop)
   },
 }
+
+export default decorateObject(methods, {
+  createVm: deferrable,
+})

@@ -28,12 +28,28 @@ import {
 } from 'cloud-config'
 import { Input as DebounceInput, Textarea as DebounceTextarea } from 'debounce-input-decorator'
 import { Limits } from 'usage'
-import { clamp, every, filter, find, forEach, includes, isEmpty, join, map, size, slice, sum, sumBy } from 'lodash'
+import {
+  clamp,
+  every,
+  filter,
+  find,
+  forEach,
+  includes,
+  isEmpty,
+  isEqual,
+  join,
+  map,
+  size,
+  slice,
+  sum,
+  sumBy,
+} from 'lodash'
 import {
   addSshKey,
   createVm,
   createVms,
   getCloudInitConfig,
+  getPoolGuestSecureBootReadiness,
   isSrShared,
   subscribeCurrentUser,
   subscribeIpPools,
@@ -210,6 +226,7 @@ const isVdiPresent = vdi => !vdi.missing
     },
     keys => keys
   )
+  const getHosts = createGetObjectsOfType('host')
   return (state, props) => ({
     isAdmin: getIsAdmin(state, props),
     isPoolAdmin: getIsPoolAdmin(state, props),
@@ -225,6 +242,7 @@ const isVdiPresent = vdi => !vdi.missing
     template: getTemplate(state, props, props.pool === undefined),
     templates: getTemplates(state, props),
     userSshKeys: getUserSshKeys(state, props),
+    hosts: getHosts(state, props),
   })
 })
 @injectIntl
@@ -251,9 +269,30 @@ export default class NewVm extends BaseComponent {
     })
   }
 
-  componentDidUpdate(prevProps) {
-    if (get(() => prevProps.template.id) !== get(() => this.props.template.id)) {
-      this._initTemplate(this.props.template)
+  async componentDidUpdate(prevProps) {
+    const template = this.props.template
+    if (get(() => prevProps.template.id) !== get(() => template.id)) {
+      this._initTemplate(template)
+    }
+
+    if (
+      !isEqual(prevProps.resourceSets, this.props.resourceSets) ||
+      prevProps.location.query.resourceSet !== this.props.location.query.resourceSet
+    ) {
+      this._setState({
+        share: this._getResourceSet()?.shareByDefault ?? false,
+      })
+    }
+
+    const pool = this.props.pool
+    if (
+      get(() => prevProps.pool.id) !== get(() => pool.id) ||
+      (pool === undefined && get(() => template.id) !== get(() => prevProps.template.id))
+    ) {
+      const poolId = pool?.id ?? template?.$pool
+      this.setState({
+        poolGuestSecurebootReadiness: poolId === undefined ? undefined : await getPoolGuestSecureBootReadiness(poolId),
+      })
     }
   }
 
@@ -261,7 +300,7 @@ export default class NewVm extends BaseComponent {
     () => this.props.resourceSets,
     createSelector(
       () => this.props.location.query.resourceSet,
-      resourceSetId => resourceSet => resourceSet !== undefined ? resourceSetId === resourceSet.id : undefined
+      resourceSetId => resourceSet => (resourceSet !== undefined ? resourceSetId === resourceSet.id : undefined)
     )
   )
 
@@ -276,7 +315,7 @@ export default class NewVm extends BaseComponent {
 
   get _isDiskTemplate() {
     const { template } = this.props
-    return template && template.template_info.disks.length === 0 && template.name_label !== 'Other install media'
+    return template && template.$VBDs.length !== 0 && template.name_label !== 'Other install media'
   }
   _setState = (newValues, callback) => {
     this.setState(
@@ -305,6 +344,7 @@ export default class NewVm extends BaseComponent {
         cpuCap: '',
         cpusMax: '',
         cpuWeight: '',
+        destroyCloudConfigVdiAfterBoot: false,
         existingDisks: {},
         fastClone: true,
         hvmBootFirmware: '',
@@ -319,8 +359,9 @@ export default class NewVm extends BaseComponent {
         VIFs: [],
         secureBoot: false,
         seqStart: 1,
-        share: false,
+        share: this._getResourceSet()?.shareByDefault ?? false,
         tags: [],
+        createVtpm: this._templateNeedsVtpm(),
       },
       callback
     )
@@ -411,6 +452,9 @@ export default class NewVm extends BaseComponent {
     const { VIFs } = state
     const _VIFs = map(VIFs, vif => {
       const _vif = { ...vif }
+      if (_vif.mac?.trim() === '') {
+        delete _vif.mac
+      }
       delete _vif.addresses
       _vif.allowedIpv4Addresses = []
       _vif.allowedIpv6Addresses = []
@@ -441,7 +485,7 @@ export default class NewVm extends BaseComponent {
 
     const data = {
       affinityHost: state.affinityHost && state.affinityHost.id,
-      clone: !this.isDiskTemplate && state.fastClone,
+      clone: this._isDiskTemplate && state.fastClone,
       existingDisks: state.existingDisks,
       installation,
       name_label: state.name_label,
@@ -465,6 +509,8 @@ export default class NewVm extends BaseComponent {
       bootAfterCreate: state.bootAfterCreate,
       copyHostBiosStrings:
         state.hvmBootFirmware !== 'uefi' && !this._templateHasBiosStrings() && state.copyHostBiosStrings,
+      createVtpm: state.createVtpm,
+      destroyCloudConfigVdiAfterBoot: state.destroyCloudConfigVdiAfterBoot,
       secureBoot: state.secureBoot,
       share: state.share,
       cloudConfig,
@@ -517,12 +563,16 @@ export default class NewVm extends BaseComponent {
 
     let VIFs = []
     const defaultNetworkIds = this._getDefaultNetworkIds(template)
-    forEach(template.VIFs, vifId => {
-      const vif = getObject(storeState, vifId, resourceSet)
-      VIFs.push({
-        network: pool || isInResourceSet(vif.$network) ? vif.$network : defaultNetworkIds[0],
-      })
-    })
+    forEach(
+      // iterate template VIFs in device order
+      template.VIFs.map(id => getObject(storeState, id, resourceSet)).sort((a, b) => a.device - b.device),
+
+      vif => {
+        VIFs.push({
+          network: pool || isInResourceSet(vif.$network) ? vif.$network : defaultNetworkIds[0],
+        })
+      }
+    )
     if (VIFs.length === 0) {
       VIFs = defaultNetworkIds.map(id => ({ network: id }))
     }
@@ -566,6 +616,7 @@ export default class NewVm extends BaseComponent {
       }),
       // settings
       secureBoot: template.secureBoot,
+      createVtpm: this._templateNeedsVtpm(),
     })
 
     if (this._isCoreOs()) {
@@ -715,6 +766,8 @@ export default class NewVm extends BaseComponent {
     template => template && template.virtualizationMode === 'hvm'
   )
 
+  _templateNeedsVtpm = () => this.props.template?.needsVtpm
+
   // On change -------------------------------------------------------------------
 
   _onChangeSshKeys = keys => this._setState({ sshKeys: map(keys, key => key.id) })
@@ -848,7 +901,12 @@ export default class NewVm extends BaseComponent {
 
   _getRedirectionUrl = id => (this.state.state.multipleVms ? '/home' : `/vms/${id}`)
 
-  _handleBootFirmware = value => this._setState({ hvmBootFirmware: value, secureBoot: false })
+  _handleBootFirmware = value =>
+    this._setState({
+      hvmBootFirmware: value,
+      secureBoot: false,
+      createVtpm: value === 'uefi' ? this._templateNeedsVtpm() : false,
+    })
 
   // MAIN ------------------------------------------------------------------------
 
@@ -1180,40 +1238,6 @@ export default class NewVm extends BaseComponent {
           </SectionContent>
         ) : (
           <SectionContent>
-            <Item>
-              <span className={styles.item}>
-                <input
-                  checked={installMethod === 'ISO'}
-                  name='installMethod'
-                  onChange={this._linkState('installMethod')}
-                  type='radio'
-                  value='ISO'
-                />
-                &nbsp;
-                <span>{_('newVmIsoDvdLabel')}</span>
-                &nbsp;
-                <span className={styles.inlineSelect}>
-                  {this.props.pool ? (
-                    <SelectVdi
-                      disabled={installMethod !== 'ISO'}
-                      onChange={this._linkState('installIso')}
-                      predicate={isVdiPresent}
-                      srPredicate={this._getIsoPredicate()}
-                      value={installIso}
-                    />
-                  ) : (
-                    <SelectResourceSetsVdi
-                      disabled={installMethod !== 'ISO'}
-                      onChange={this._linkState('installIso')}
-                      predicate={isVdiPresent}
-                      resourceSet={this._getResolvedResourceSet()}
-                      srPredicate={this._getIsoPredicate()}
-                      value={installIso}
-                    />
-                  )}
-                </span>
-              </span>
-            </Item>
             {template.virtualizationMode === 'pv' ? (
               <span>
                 <Item>
@@ -1252,6 +1276,40 @@ export default class NewVm extends BaseComponent {
             )}
           </SectionContent>
         )}
+        <SectionContent>
+          <span className={styles.item}>
+            <input
+              checked={installMethod === 'ISO'}
+              name='installMethod'
+              onChange={this._linkState('installMethod')}
+              type='radio'
+              value='ISO'
+            />
+            &nbsp;
+            <span>{_('newVmIsoDvdLabel')}</span>
+            &nbsp;
+            <span className={styles.inlineSelect}>
+              {this.props.pool ? (
+                <SelectVdi
+                  disabled={installMethod !== 'ISO'}
+                  onChange={this._linkState('installIso')}
+                  predicate={isVdiPresent}
+                  srPredicate={this._getIsoPredicate()}
+                  value={installIso}
+                />
+              ) : (
+                <SelectResourceSetsVdi
+                  disabled={installMethod !== 'ISO'}
+                  onChange={this._linkState('installIso')}
+                  predicate={isVdiPresent}
+                  resourceSet={this._getResolvedResourceSet()}
+                  srPredicate={this._getIsoPredicate()}
+                  value={installIso}
+                />
+              )}
+            </span>
+          </span>
+        </SectionContent>
         {this._isCoreOs() && (
           <div>
             <label>{_('newVmCloudConfig')}</label>{' '}
@@ -1498,7 +1556,10 @@ export default class NewVm extends BaseComponent {
       cpuCap,
       cpusMax,
       cpuWeight,
+      createVtpm,
+      destroyCloudConfigVdiAfterBoot,
       hvmBootFirmware,
+      installMethod,
       memoryDynamicMin,
       memoryDynamicMax,
       memoryStaticMax,
@@ -1530,6 +1591,8 @@ export default class NewVm extends BaseComponent {
         </label>
       ) : null
 
+    const isVtpmSupported = pool?.vtpmSupported ?? true
+
     return (
       <Section icon='new-vm-advanced' title='newVmAdvancedPanel' done={this._isAdvancedDone()}>
         <SectionContent column>
@@ -1538,8 +1601,8 @@ export default class NewVm extends BaseComponent {
           </Button>
         </SectionContent>
         {showAdvanced && [
-          <hr />,
-          <SectionContent>
+          <hr key='hr' />,
+          <SectionContent key='advanced'>
             <Item>
               <input checked={bootAfterCreate} onChange={this._linkState('bootAfterCreate')} type='checkbox' />
               &nbsp;
@@ -1554,6 +1617,21 @@ export default class NewVm extends BaseComponent {
               <Tags labels={tags} onChange={this._linkState('tags')} />
             </Item>
           </SectionContent>,
+          <SectionContent key='destroyCloudConfigVdi'>
+            <Item>
+              <input
+                checked={destroyCloudConfigVdiAfterBoot}
+                disabled={installMethod === 'noConfigDrive' || !bootAfterCreate}
+                id='destroyCloudConfigDisk'
+                onChange={this._toggleState('destroyCloudConfigVdiAfterBoot')}
+                type='checkbox'
+              />
+              <label htmlFor='destroyCloudConfigDisk'>
+                &nbsp;
+                {_('destroyCloudConfigVdiAfterBoot')}
+              </label>
+            </Item>
+          </SectionContent>,
           this._getResourceSet() !== undefined && (
             <SectionContent>
               <Item>
@@ -1563,7 +1641,7 @@ export default class NewVm extends BaseComponent {
               </Item>
             </SectionContent>
           ),
-          <SectionContent>
+          <SectionContent key='newVmCpu'>
             <Item label={_('newVmCpuWeightLabel')}>
               <DebounceInput
                 className='form-control'
@@ -1598,7 +1676,7 @@ export default class NewVm extends BaseComponent {
               />
             </Item>
           </SectionContent>,
-          <SectionContent>
+          <SectionContent key='newVmDynamic'>
             <Item label={_('newVmDynamicMinLabel')}>
               <SizeInput
                 value={defined(memoryDynamicMin, null)}
@@ -1621,7 +1699,7 @@ export default class NewVm extends BaseComponent {
               />
             </Item>
           </SectionContent>,
-          <SectionContent>
+          <SectionContent key='newVmMultipleVms'>
             <Item label={_('newVmMultipleVms')}>
               <Toggle value={multipleVms} onChange={this._linkState('multipleVms')} />
             </Item>
@@ -1714,13 +1792,44 @@ export default class NewVm extends BaseComponent {
               </Item>
             </SectionContent>
           ),
-          hvmBootFirmware === 'uefi' && (
-            <SectionContent>
+          hvmBootFirmware === 'uefi' && [
+            <SectionContent key='secureBoot'>
               <Item label={_('secureBoot')}>
                 <Toggle onChange={this._toggleState('secureBoot')} value={secureBoot} />
               </Item>
-            </SectionContent>
-          ),
+              {secureBoot && this.state.poolGuestSecurebootReadiness === 'not_ready' && (
+                <span className='align-self-center text-danger ml-1'>
+                  <a
+                    href='https://docs.xcp-ng.org/guides/guest-UEFI-Secure-Boot/'
+                    rel='noopener noreferrer'
+                    className='text-danger'
+                    target='_blank'
+                  >
+                    <Icon icon='alarm' /> {_('secureBootNotSetup')}
+                  </a>
+                </span>
+              )}
+            </SectionContent>,
+            <SectionContent key='vtpm'>
+              <Item label={_('enableVtpm')} className='d-inline-flex'>
+                <Tooltip content={!isVtpmSupported ? _('vtpmNotSupported') : undefined}>
+                  <Toggle onChange={this._toggleState('createVtpm')} value={createVtpm} disabled={!isVtpmSupported} />
+                </Tooltip>
+                {/* FIXME: link to VTPM documentation when ready */}
+                {/* &nbsp;
+                <Tooltip content={_('seeVtpmDocumentation')}>
+                  <a className='text-info align-self-center' style={{ cursor: 'pointer' }} href='#'>
+                    <Icon icon='info' />
+                  </a>
+                </Tooltip> */}
+                {!createVtpm && this._templateNeedsVtpm() && (
+                  <span className='align-self-center text-warning ml-1'>
+                    <Icon icon='alarm' /> {_('warningVtpmRequired')}
+                  </span>
+                )}
+              </Item>
+            </SectionContent>,
+          ],
           isAdmin && isHvm && (
             <SectionContent>
               <Item>
@@ -1790,29 +1899,21 @@ export default class NewVm extends BaseComponent {
           {limits && (
             <Row>
               <Col size={3}>
-                {cpusLimits && (
-                  <Limits
-                    limit={cpusLimits.total}
-                    toBeUsed={CPUs * factor}
-                    used={cpusLimits.total - cpusLimits.available}
-                  />
+                {cpusLimits?.total !== undefined && (
+                  <Limits limit={cpusLimits.total} toBeUsed={CPUs * factor} used={cpusLimits.usage} />
                 )}
               </Col>
               <Col size={3}>
-                {memoryLimits && (
-                  <Limits
-                    limit={memoryLimits.total}
-                    toBeUsed={_memory * factor}
-                    used={memoryLimits.total - memoryLimits.available}
-                  />
+                {memoryLimits?.total !== undefined && (
+                  <Limits limit={memoryLimits.total} toBeUsed={_memory * factor} used={memoryLimits.usage} />
                 )}
               </Col>
               <Col size={3}>
-                {diskLimits && (
+                {diskLimits?.total !== undefined && (
                   <Limits
                     limit={diskLimits.total}
                     toBeUsed={(sumBy(VDIs, 'size') + sum(map(existingDisks, disk => disk.size))) * factor}
-                    used={diskLimits.total - diskLimits.available}
+                    used={diskLimits.usage}
                   />
                 )}
               </Col>
@@ -1843,10 +1944,10 @@ export default class NewVm extends BaseComponent {
     const factor = multipleVms ? nameLabels.length : 1
 
     return !(
-      CPUs * factor > get(() => resourceSet.limits.cpus.available) ||
-      _memory * factor > get(() => resourceSet.limits.memory.available) ||
+      CPUs * factor > get(() => resourceSet.limits.cpus.total - resourceSet.limits.cpus.usage) ||
+      _memory * factor > get(() => resourceSet.limits.memory.total - resourceSet.limits.memory.usage) ||
       (sumBy(VDIs, 'size') + sum(map(existingDisks, disk => disk.size))) * factor >
-        get(() => resourceSet.limits.disk.available)
+        get(() => resourceSet.limits.disk.total - resourceSet.limits.disk.usage)
     )
   }
 }

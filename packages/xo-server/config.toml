@@ -76,6 +76,8 @@ defaultSignInPage = '/signin'
 throttlingDelay = '2 seconds'
 
 [backups]
+autoUnmountPartitionDelay = '24h'
+
 disableMergeWorker = false
 
 # Mode to use for newly created backup directories
@@ -100,15 +102,13 @@ mergeBlockConcurrency = 2
 # increase to in rease performance, reduce if you have timeout or memory error during transfer
 writeBlockConcurrency = 16
 
-# This is a work-around.
-#
-# See https://github.com/vatesfr/xen-orchestra/pull/4674
-maxMergedDeltasPerRun = 2
-
 # https://github.com/naugtur/blocked-at#params-and-return-value
 [blockedAtOptions]
 enabled = false
 threshold = 1000
+
+[http]
+useForwardedHeaders = false
 
 # Helmet handles HTTP security via headers
 #
@@ -130,8 +130,26 @@ port = 80
 # These options are applied to all listen entries.
 [http.listenOptions]
 
+# Number of milliseconds allowed to receive the entire request.
+#
+# The default value changed from no limit to 5 minutes in Node 18.0 to mitigate
+# Slowloris attacks.
+#
+# This breaks a number of XO use cases, for instance uploading a VDI via the
+# REST API, therefore it's changed to 1 day.
+#
+# Completely disabled for now because it appears to be broken:
+# https://github.com/nodejs/node/issues/46574
+requestTimeout = 0
+
+# These mount points are exposed without needing to be authenticated.
+[http.publicMounts]
+'/robots.txt' = './robots.txt'
+
+# These mount points are exposed only when authenticated.
 [http.mounts]
-'/' = '../xo-web/dist'
+'/' = '../xo-web/dist/'
+'/v6' = '../../@xen-orchestra/web/dist/'
 
 [logs]
 # Display all logs matching this filter, regardless of their level
@@ -140,7 +158,10 @@ port = 80
 # Display all logs with level >=, regardless of their namespace
 level = 'info'
 
+[logs.transport.console]
+
 [plugins]
+lookupPaths = ['./node_modules', '../', '/usr/local/lib/node_modules']
 
 [remoteOptions]
 mountsDir = '/run/xo-server/mounts'
@@ -163,6 +184,7 @@ ignoreVmSnapshotResources = false
 restartHostTimeout = '20 minutes'
 maxUncoalescedVdis = 1
 vdiExportConcurrency = 12
+vmEvacuationConcurrency = 3
 vmExportConcurrency = 2
 vmSnapshotConcurrency = 2
 

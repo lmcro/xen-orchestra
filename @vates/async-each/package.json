@@ -29,6 +29,11 @@
     "node": ">=8.10"
   },
   "scripts": {
-    "postversion": "npm publish --access public"
+    "postversion": "npm publish --access public",
+    "test": "node--test"
+  },
+  "devDependencies": {
+    "sinon": "^18.0.0",
+    "test": "^3.2.1"
   }
 }

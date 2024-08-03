@@ -3,7 +3,6 @@ import _ from 'intl'
 import ActionButton from 'action-button'
 import addSubscriptions from 'add-subscriptions'
 import Button from 'button'
-import constructQueryString from 'construct-query-string'
 import Copiable from 'copiable'
 import CopyToClipboard from 'react-copy-to-clipboard'
 import decorate from 'apply-decorators'
@@ -21,6 +20,7 @@ import { get } from '@xen-orchestra/defined'
 import { groupBy, isEmpty, map, some } from 'lodash'
 import { injectState, provideState } from 'reaclette'
 import { Proxy } from 'render-xo-item'
+import { smartModeToComplexMatcher } from 'smartModeToComplexMatcher'
 import { withRouter } from 'react-router'
 import {
   cancelJob,
@@ -29,14 +29,17 @@ import {
   enableSchedule,
   runBackupNgJob,
   runMetadataBackupJob,
+  runMirrorBackupJob,
   subscribeBackupNgJobs,
   subscribeBackupNgLogs,
   subscribeMetadataBackupJobs,
+  subscribeMirrorBackupJobs,
   subscribeSchedules,
 } from 'xo'
 
 import getSettingsWithNonDefaultValue from '../_getSettingsWithNonDefaultValue'
 import { destructPattern } from '../utils'
+import { REPORT_WHEN_LABELS } from '../new/_reportWhen'
 import { LogStatus } from '../../logs/backup-ng'
 
 const Ul = props => <ul {...props} style={{ listStyleType: 'none' }} />
@@ -49,26 +52,38 @@ const Li = props => (
   />
 )
 
+const isMirrorBackupType = item => item?.type === 'mirrorBackup'
+
+const isBackupType = item => item?.type === 'backup'
+
 const MODES = [
   {
+    label: 'mirrorFullBackup',
+    test: job => isMirrorBackupType(job) && job.mode === 'full',
+  },
+  {
+    label: 'mirrorIncrementalBackup',
+    test: job => isMirrorBackupType(job) && job.mode === 'delta',
+  },
+  {
     label: 'rollingSnapshot',
-    test: job => some(job.settings, ({ snapshotRetention }) => snapshotRetention > 0),
+    test: job => isBackupType(job) && some(job.settings, ({ snapshotRetention }) => snapshotRetention > 0),
   },
   {
     label: 'backup',
-    test: job => job.mode === 'full' && !isEmpty(get(() => destructPattern(job.remotes))),
+    test: job => isBackupType(job) && job.mode === 'full' && !isEmpty(get(() => destructPattern(job.remotes))),
   },
   {
     label: 'deltaBackup',
-    test: job => job.mode === 'delta' && !isEmpty(get(() => destructPattern(job.remotes))),
+    test: job => isBackupType(job) && job.mode === 'delta' && !isEmpty(get(() => destructPattern(job.remotes))),
   },
   {
     label: 'continuousReplication',
-    test: job => job.mode === 'delta' && !isEmpty(get(() => destructPattern(job.srs))),
+    test: job => isBackupType(job) && job.mode === 'delta' && !isEmpty(get(() => destructPattern(job.srs))),
   },
   {
     label: 'disasterRecovery',
-    test: job => job.mode === 'full' && !isEmpty(get(() => destructPattern(job.srs))),
+    test: job => isBackupType(job) && job.mode === 'full' && !isEmpty(get(() => destructPattern(job.srs))),
   },
   {
     label: 'poolMetadata',
@@ -81,8 +96,8 @@ const MODES = [
 ]
 
 const _deleteBackupJobs = items => {
-  const { backup: backupIds, metadataBackup: metadataBackupIds } = groupBy(items, 'type')
-  return deleteBackupJobs({ backupIds, metadataBackupIds })
+  const { backup: backupIds, metadataBackup: metadataBackupIds, mirrorBackup: mirrorBackupIds } = groupBy(items, 'type')
+  return deleteBackupJobs({ backupIds, metadataBackupIds, mirrorBackupIds })
 }
 
 const _runBackupJob = ({ id, name, nVms, schedule, type }) =>
@@ -94,12 +109,17 @@ const _runBackupJob = ({ id, name, nVms, schedule, type }) =>
           id: id.slice(0, 5),
           name: <strong>{name}</strong>,
         })}{' '}
-        {_('runBackupJobWarningNVms', {
-          nVms,
-        })}
+        {type === 'backup' &&
+          _('runBackupJobWarningNVms', {
+            nVms,
+          })}
       </span>
     ),
-  }).then(() => (type === 'backup' ? runBackupNgJob({ id, schedule }) : runMetadataBackupJob({ id, schedule })))
+  }).then(() => {
+    const method =
+      type === 'backup' ? runBackupNgJob : isMirrorBackupType({ type }) ? runMirrorBackupJob : runMetadataBackupJob
+    return method({ id, schedule })
+  })
 
 const CURSOR_POINTER_STYLE = { cursor: 'pointer' }
 const GoToLogs = decorate([
@@ -235,6 +255,7 @@ const SchedulePreviewBody = decorate([
 @addSubscriptions({
   jobs: subscribeBackupNgJobs,
   metadataJobs: subscribeMetadataBackupJobs,
+  mirrorBackupJobs: subscribeMirrorBackupJobs,
   schedulesByJob: cb =>
     subscribeSchedules(schedules => {
       cb(groupBy(schedules, 'jobId'))
@@ -299,6 +320,7 @@ class JobsTable extends React.Component {
             compression,
             concurrency,
             fullInterval,
+            nRetriesVmBackupFailures,
             offlineBackup,
             offlineSnapshot,
             proxyId,
@@ -307,13 +329,15 @@ class JobsTable extends React.Component {
           } = getSettingsWithNonDefaultValue(job.mode, {
             compression: job.compression,
             proxyId: job.proxy,
-            ...job.settings[''],
+            ...job.settings?.[''],
           })
 
           return (
             <Ul>
               {proxyId !== undefined && <Li>{_.keyValue(_('proxy'), <Proxy id={proxyId} key={proxyId} />)}</Li>}
-              {reportWhen !== undefined && <Li>{_.keyValue(_('reportWhen'), reportWhen)}</Li>}
+              {reportWhen in REPORT_WHEN_LABELS && (
+                <Li>{_.keyValue(_('reportWhen'), _(REPORT_WHEN_LABELS[reportWhen]))}</Li>
+              )}
               {concurrency !== undefined && <Li>{_.keyValue(_('concurrency'), concurrency)}</Li>}
               {timeout !== undefined && <Li>{_.keyValue(_('timeout'), timeout / 3600e3)} hours</Li>}
               {fullInterval !== undefined && <Li>{_.keyValue(_('fullBackupInterval'), fullInterval)}</Li>}
@@ -329,6 +353,9 @@ class JobsTable extends React.Component {
               {compression !== undefined && (
                 <Li>{_.keyValue(_('compression'), compression === 'native' ? 'GZIP' : compression)}</Li>
               )}
+              {nRetriesVmBackupFailures > 0 && (
+                <Li>{_.keyValue(_('nRetriesVmBackupFailures'), nRetriesVmBackupFailures)}</Li>
+              )}
             </Ul>
           )
         },
@@ -340,7 +367,7 @@ class JobsTable extends React.Component {
         handler: (job, { goTo }) =>
           goTo({
             pathname: '/home',
-            query: { t: 'VM', s: constructQueryString(job.vms) },
+            query: { t: 'VM', s: smartModeToComplexMatcher(job.vms).toString() },
           }),
         disabled: job => job.type !== 'backup',
         label: _('redirectToMatchingVms'),
@@ -382,7 +409,8 @@ class JobsTable extends React.Component {
     createSelector(
       () => this.props.jobs,
       () => this.props.metadataJobs,
-      (jobs = [], metadataJobs = []) => [...jobs, ...metadataJobs]
+      () => this.props.mirrorBackupJobs,
+      (jobs = [], metadataJobs = [], mirrorJobs = []) => [...jobs, ...metadataJobs, ...mirrorJobs]
     ),
     () => this.props.predicate
   )

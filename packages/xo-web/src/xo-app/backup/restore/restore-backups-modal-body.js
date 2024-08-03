@@ -1,4 +1,5 @@
 import _ from 'intl'
+import Icon from 'icon'
 import React from 'react'
 import ChooseSrForEachVdisModal from 'xo/choose-sr-for-each-vdis-modal'
 import Component from 'base-component'
@@ -11,7 +12,11 @@ import { SelectSr } from 'select-objects'
 const BACKUP_RENDERER = getRenderXoItemOfType('backup')
 
 export default class RestoreBackupsModalBody extends Component {
-  state = { generateNewMacAddresses: false, targetSrs: { mainSr: undefined, mapVdisSrs: undefined } }
+  state = {
+    generateNewMacAddresses: false,
+    targetSrs: { mainSr: undefined, mapVdisSrs: undefined },
+    useDifferentialRestore: false,
+  }
 
   get value() {
     return this.state
@@ -33,6 +38,16 @@ export default class RestoreBackupsModalBody extends Component {
   render() {
     return (
       <div>
+        {this.props.backupHealthCheck && (
+          <a
+            className='text-info'
+            rel='noreferrer'
+            href='https://xen-orchestra.com/docs/backups.html#backup-health-check'
+            target='_blank'
+          >
+            <Icon icon='info' />
+          </a>
+        )}
         <div className='mb-1'>
           <Select
             optionRenderer={BACKUP_RENDERER}
@@ -68,6 +83,17 @@ export default class RestoreBackupsModalBody extends Component {
                 {_('generateNewMacAddress')}
               </div>
             )}
+
+            {this.state.backup.mode === 'delta' && (
+              <div>
+                <Toggle
+                  iconSize={1}
+                  value={this.state.useDifferentialRestore}
+                  onChange={this.toggleState('useDifferentialRestore')}
+                />{' '}
+                {_('restoreVmUseDifferentialRestore')}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -77,6 +103,7 @@ export default class RestoreBackupsModalBody extends Component {
 RestoreBackupsModalBody.defaultProps = {
   showGenerateNewMacAddress: true,
   showStartAfterBackup: true,
+  backupHealthCheck: false,
 }
 
 export class RestoreBackupsBulkModalBody extends Component {

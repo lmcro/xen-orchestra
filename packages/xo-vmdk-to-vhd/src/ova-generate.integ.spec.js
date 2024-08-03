@@ -1,11 +1,11 @@
 /* eslint-env jest */
 import { spawn } from 'child_process'
 import { createReadStream, createWriteStream, readFile } from 'fs-extra'
+import { rimraf } from 'rimraf'
 import execa from 'execa'
 import path from 'path'
 import { pFromCallback, fromEvent } from 'promise-toolbox'
 import tmp from 'tmp'
-import rimraf from 'rimraf'
 import { writeOvaOn } from './ova-generate'
 import { parseOVF } from './ova-read'
 
@@ -19,7 +19,7 @@ beforeEach(async () => {
 afterEach(async () => {
   const tmpDir = process.cwd()
   process.chdir(initialDir)
-  await pFromCallback(cb => rimraf(tmpDir, cb))
+  await rimraf(tmpDir)
 })
 // from https://github.com/aautio/validate-with-xmllint/blob/master/src/index.ts
 // that way the test will fail if user does not have xml-lint installed on its os
@@ -99,7 +99,7 @@ test('An ova file is generated correctly', async () => {
     try {
       await execXmllint(xml, [
         '--schema',
-        path.join(__dirname, 'ova-schema', 'dsp8023_1.1.1.xsd'),
+        path.join(__dirname, '..', 'src', 'ova-schema', 'dsp8023_1.1.1.xsd'),
         '--noout',
         '--nonet',
         '-',

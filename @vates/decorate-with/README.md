@@ -10,8 +10,8 @@
 
 Installation of the [npm package](https://npmjs.org/package/@vates/decorate-with):
 
-```
-> npm install --save @vates/decorate-with
+```sh
+npm install --save @vates/decorate-with
 ```
 
 ## Usage
@@ -77,6 +77,42 @@ decorateClass(Foo, {
     [lodash.debounce, 150]
     lodash.curry,
   ])
+})
+```
+
+### `decorateObject(object, map)`
+
+Decorates an object the same way `decorateClass()` decorates a class:
+
+```js
+import { decorateObject } from '@vates/decorate-with'
+
+const object = {
+  get bar() {
+    // body
+  },
+
+  set bar(value) {
+    // body
+  },
+
+  baz() {
+    // body
+  },
+}
+
+decorateObject(object, {
+  // getter and/or setter
+  bar: {
+    // without arguments
+    get: lodash.memoize,
+
+    // with arguments
+    set: [lodash.debounce, 150],
+  },
+
+  // method (with or without arguments)
+  baz: lodash.curry,
 })
 ```
 

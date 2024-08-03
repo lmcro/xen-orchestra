@@ -4,7 +4,30 @@ import React from 'react'
 import { getLicenses } from 'xo'
 import { injectIntl } from 'react-intl'
 import { injectState, provideState } from 'reaclette'
-import { map } from 'lodash'
+import map from 'lodash/map.js'
+
+import { renderXoItemFromId } from './render-xo-item'
+
+const LicenseOptions = ({ license, formatDate }) => {
+  /**
+   * license.productId can be:
+   * - xcpng-enterprise
+   * - xcpng-standard
+   * - xo-proxy
+   * - xostor
+   * - xostor.trial
+   */
+  const productId = license.productId.startsWith('xostor') ? license.productId : license.productId.split('-')[1]
+  return (
+    <option value={license.id}>
+      <span>
+        {productId.charAt(0).toUpperCase() + productId.slice(1)} ({license.id.slice(-4)}),{' '}
+        {license.expires !== undefined ? formatDate(license.expires) : '-'}
+        {license.boundObjectId !== undefined && <span>, {renderXoItemFromId(license.boundObjectId)}</span>}
+      </span>
+    </option>
+  )
+}
 
 const SelectLicense = decorate([
   injectIntl,
@@ -12,10 +35,16 @@ const SelectLicense = decorate([
     computed: {
       licenses: async (state, { productType }) => {
         try {
-          return (await getLicenses({ productType }))?.filter(
-            ({ boundObjectId, expires }) =>
-              boundObjectId === undefined && (expires === undefined || expires > Date.now())
-          )
+          const availableLicenses = {
+            bound: [],
+            notBound: [],
+          }
+          ;(await getLicenses({ productType })).forEach(license => {
+            if (license.expires === undefined || license.expires > Date.now()) {
+              availableLicenses[license.boundObjectId === undefined ? 'notBound' : 'bound'].push(license)
+            }
+          })
+          return availableLicenses
         } catch (error) {
           return { licenseError: error }
         }
@@ -23,7 +52,7 @@ const SelectLicense = decorate([
     },
   }),
   injectState,
-  ({ state: { licenses }, intl: { formatTime }, onChange }) =>
+  ({ state: { licenses }, intl: { formatDate }, onChange, showBoundLicenses }) =>
     licenses?.licenseError !== undefined ? (
       <span>
         <em className='text-danger'>{_('getLicensesError')}</em>
@@ -35,26 +64,22 @@ const SelectLicense = decorate([
             {message}
           </option>
         ))}
-        {map(licenses, license =>
-          _(
-            'expiresOn',
-            {
-              date:
-                license.expires !== undefined
-                  ? formatTime(license.expires, {
-                      day: 'numeric',
-                      month: 'numeric',
-                      year: 'numeric',
-                    })
-                  : '',
-            },
-            message => (
-              <option key={license.id} value={license.id}>
-                {license.id.slice(-4)} {license.expires ? `(${message})` : ''}
-              </option>
-            )
-          )
-        )}
+
+        {_('notBoundSelectLicense', i18nNotBound => (
+          <optgroup label={i18nNotBound}>
+            {map(licenses?.notBound, license => (
+              <LicenseOptions formatDate={formatDate} key={license.id} license={license} />
+            ))}
+          </optgroup>
+        ))}
+        {showBoundLicenses &&
+          _('boundSelectLicense', i18nBound => (
+            <optgroup label={i18nBound}>
+              {map(licenses?.bound, license => (
+                <LicenseOptions formatDate={formatDate} key={license.id} license={license} />
+              ))}
+            </optgroup>
+          ))}
       </select>
     ),
 ])

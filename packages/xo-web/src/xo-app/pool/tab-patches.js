@@ -6,11 +6,22 @@ import Upgrade from 'xoa-upgrade'
 import { addSubscriptions, connectStore, formatSize } from 'utils'
 import { alert } from 'modal'
 import { Col, Container, Row } from 'grid'
-import { createGetObjectsOfType } from 'selectors'
+import { createGetObjectsOfType, createSelector } from 'selectors'
 import { FormattedRelative, FormattedTime } from 'react-intl'
 import { getXoaPlan, ENTERPRISE } from 'xoa-plans'
-import { installAllPatchesOnPool, installPatches, rollingPoolUpdate, subscribeHostMissingPatches } from 'xo'
-import { isEmpty } from 'lodash'
+import {
+  installAllPatchesOnPool,
+  installPatches,
+  isSrShared,
+  isSrWritable,
+  rollingPoolUpdate,
+  subscribeCurrentUser,
+  subscribeHostMissingPatches,
+} from 'xo'
+import filter from 'lodash/filter.js'
+import isEmpty from 'lodash/isEmpty.js'
+import size from 'lodash/size.js'
+import some from 'lodash/some.js'
 
 const ROLLING_POOL_UPDATES_AVAILABLE = getXoaPlan().value >= ENTERPRISE.value
 
@@ -48,7 +59,7 @@ const MISSING_PATCH_COLUMNS = [
 
 const ACTIONS = [
   {
-    disabled: (_, { pool }) => pool.HA_enabled,
+    disabled: (_, { pool, needsCredentials }) => pool.HA_enabled || needsCredentials,
     handler: (patches, { pool }) => installPatches(patches, pool),
     icon: 'host-patch-update',
     label: _('install'),
@@ -156,18 +167,75 @@ const INSTALLED_PATCH_COLUMNS = [
 
 @addSubscriptions(({ master }) => ({
   missingPatches: cb => subscribeHostMissingPatches(master, cb),
+  userPreferences: cb => subscribeCurrentUser(user => cb(user.preferences)),
 }))
-@connectStore({
-  hostPatches: createGetObjectsOfType('patch').pick((_, { master }) => master.patches),
+@connectStore(() => {
+  const getSrs = createGetObjectsOfType('SR')
+  const getPoolSrs = (state, props) =>
+    getSrs.filter(
+      createSelector(
+        (_, props) => props.pool.id,
+        poolId => sr => sr.$pool === poolId
+      )
+    )(state, props)
+  return {
+    hostPatches: createGetObjectsOfType('patch').pick((_, { master }) => master.patches),
+    poolHosts: createGetObjectsOfType('host').filter(
+      createSelector(
+        (_, props) => props.pool.id,
+        poolId => host => host.$pool === poolId
+      )
+    ),
+    runningVms: createGetObjectsOfType('VM').filter(
+      createSelector(
+        (_, props) => props.pool.id,
+        poolId => vm => vm.$pool === poolId && vm.power_state === 'Running'
+      )
+    ),
+    vbds: createGetObjectsOfType('VBD'),
+    vdis: createGetObjectsOfType('VDI'),
+    srs: getSrs,
+    poolSrs: getPoolSrs,
+  }
 })
 export default class TabPatches extends Component {
+  getNVmsRunningOnLocalStorage = createSelector(
+    () => this.props.runningVms,
+    () => this.props.vbds,
+    () => this.props.vdis,
+    () => this.props.srs,
+    (runningVms, vbds, vdis, srs) =>
+      filter(runningVms, vm =>
+        some(vm.$VBDs, vbdId => {
+          const vbd = vbds[vbdId]
+          const vdi = vdis[vbd?.VDI]
+          const sr = srs[vdi?.$SR]
+          return !isSrShared(sr) && isSrWritable(sr)
+        })
+      ).length
+  )
+
+  hasAXostor = createSelector(
+    () => this.props.poolSrs,
+    poolSrs => some(poolSrs, { SR_type: 'linstor' })
+  )
+
   render() {
     const {
       hostPatches,
+      master: { productBrand },
       missingPatches = [],
       pool,
-      master: { productBrand },
+      poolHosts,
+      userPreferences,
     } = this.props
+
+    const needsCredentials = productBrand !== 'XCP-ng' && userPreferences.xsCredentials === undefined
+
+    const isSingleHost = size(poolHosts) < 2
+
+    const hasAXostor = this.hasAXostor()
+    const hasMultipleVmsRunningOnLocalStorage = this.getNVmsRunningOnLocalStorage() > 0
 
     return (
       <Upgrade place='poolPatches' required={2}>
@@ -177,21 +245,40 @@ export default class TabPatches extends Component {
               {ROLLING_POOL_UPDATES_AVAILABLE && (
                 <TabButton
                   btnStyle='primary'
-                  disabled={isEmpty(missingPatches)}
+                  disabled={
+                    hasAXostor || isEmpty(missingPatches) || hasMultipleVmsRunningOnLocalStorage || isSingleHost
+                  }
                   handler={rollingPoolUpdate}
                   handlerParam={pool.id}
                   icon='pool-rolling-update'
                   labelId='rollingPoolUpdate'
+                  tooltip={
+                    hasAXostor
+                      ? _('rollingPoolUpdateDisabledBecauseXostorOnPool')
+                      : hasMultipleVmsRunningOnLocalStorage
+                        ? _('nVmsRunningOnLocalStorage', {
+                            nVms: this.getNVmsRunningOnLocalStorage(),
+                          })
+                        : isSingleHost
+                          ? _('multiHostPoolUpdate')
+                          : undefined
+                  }
                 />
               )}
               <TabButton
                 btnStyle='primary'
                 data-pool={pool}
-                disabled={isEmpty(missingPatches) || pool.HA_enabled}
+                disabled={isEmpty(missingPatches) || pool.HA_enabled || needsCredentials}
                 handler={installAllPatchesOnPool}
                 icon='host-patch-update'
                 labelId='installPoolPatches'
-                tooltip={pool.HA_enabled ? _('highAvailabilityNotDisabledTooltip') : undefined}
+                tooltip={
+                  pool.HA_enabled
+                    ? _('highAvailabilityNotDisabledTooltip')
+                    : needsCredentials
+                      ? _('xsCredentialsMissingShort')
+                      : undefined
+                }
               />
             </Col>
           </Row>
@@ -212,11 +299,27 @@ export default class TabPatches extends Component {
               <Row>
                 <Col>
                   <h3>{_('hostMissingPatches')}</h3>
+                  {needsCredentials && (
+                    <div className='alert alert-danger'>
+                      {_('xsCredentialsMissing', {
+                        link: (
+                          <a
+                            href='https://xen-orchestra.com/docs/updater.html#xenserver-updates'
+                            target='_blank'
+                            rel='noreferrer'
+                          >
+                            https://xen-orchestra.com/docs/updater.html
+                          </a>
+                        ),
+                      })}
+                    </div>
+                  )}
                   <SortedTable
                     actions={ACTIONS}
                     collection={missingPatches}
                     columns={MISSING_PATCH_COLUMNS}
                     data-pool={pool}
+                    data-needsCredentials={needsCredentials}
                     stateUrlParam='s_missing'
                   />
                 </Col>

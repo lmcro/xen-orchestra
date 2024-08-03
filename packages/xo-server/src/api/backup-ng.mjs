@@ -12,9 +12,32 @@ const SCHEMA_SETTINGS = {
     '*': {
       type: 'object',
       properties: {
+        cbtDestroySnapshotData: {
+          type: 'boolean',
+          optional: true,
+        },
         concurrency: {
           type: 'number',
           minimum: 0,
+          optional: true,
+        },
+        maxExportRate: {
+          type: 'number',
+          minimum: 0,
+          optional: true,
+        },
+        nbdConcurrency: {
+          type: 'number',
+          minimum: 1,
+          optional: true,
+        },
+        nRetriesVmBackupFailures: {
+          minimum: 0,
+          optional: true,
+          type: 'number',
+        },
+        preferNbd: {
+          type: 'boolean',
           optional: true,
         },
       },
@@ -25,8 +48,7 @@ const SCHEMA_SETTINGS = {
 }
 
 export function createJob({ schedules, ...job }) {
-  job.userId = this.apiContext.user.id
-  return this.createBackupNgJob(job, schedules).then(({ id }) => id)
+  return this.createBackupNgJob('backup', job, schedules).then(({ id }) => id)
 }
 
 createJob.permission = 'admin'
@@ -69,7 +91,7 @@ export function getSuggestedExcludedTags() {
 }
 
 export function deleteJob({ id }) {
-  return this.deleteBackupNgJob(id)
+  return this.deleteBackupNgJob(id, 'backup')
 }
 deleteJob.permission = 'admin'
 deleteJob.params = {
@@ -273,6 +295,10 @@ importVmBackup.params = {
   sr: {
     type: 'string',
   },
+  useDifferentialRestore: {
+    type: 'boolean',
+    optional: true,
+  },
 }
 
 export function checkBackup({ id, settings, sr }) {
@@ -332,21 +358,21 @@ listFiles.params = {
   },
 }
 
-async function handleFetchFiles(req, res, { remote, disk, partition, paths }) {
-  const zipStream = await this.fetchBackupNgPartitionFiles(remote, disk, partition, paths)
+async function handleFetchFiles(req, res, { remote, disk, format, partition, paths }) {
+  const stream = await this.fetchBackupNgPartitionFiles(remote, disk, partition, paths, format)
 
   res.setHeader('content-disposition', 'attachment')
   res.setHeader('content-type', 'application/octet-stream')
-  return zipStream
+  return stream
 }
 
 export async function fetchFiles(params) {
-  const { paths } = params
+  const { format, paths } = params
   let filename = `restore_${safeDateFormat(new Date())}`
   if (paths.length === 1) {
     filename += `_${basename(paths[0])}`
   }
-  filename += '.zip'
+  filename += '.' + format
 
   return this.registerHttpRequest(handleFetchFiles, params, {
     suffix: '/' + encodeURIComponent(filename),
@@ -359,6 +385,10 @@ fetchFiles.params = {
   disk: {
     type: 'string',
   },
+  format: {
+    type: 'string',
+    default: 'tgz',
+  },
   partition: {
     optional: true,
     type: 'string',
@@ -367,6 +397,50 @@ fetchFiles.params = {
     items: { type: 'string' },
     minItems: 1,
     type: 'array',
+  },
+  remote: {
+    type: 'string',
+  },
+}
+
+export function listMountedPartitions() {
+  return this.listMountedPartitions()
+}
+
+listMountedPartitions.permission = 'admin'
+
+export function mountPartition({ remote, disk, partition }) {
+  return this.mountPartition(remote, disk, partition)
+}
+
+mountPartition.permission = 'admin'
+
+mountPartition.params = {
+  disk: {
+    type: 'string',
+  },
+  partition: {
+    optional: true,
+    type: 'string',
+  },
+  remote: {
+    type: 'string',
+  },
+}
+
+export function unmountPartition({ remote, disk, partition }) {
+  return this.unmountPartition(remote, disk, partition)
+}
+
+unmountPartition.permission = 'admin'
+
+unmountPartition.params = {
+  disk: {
+    type: 'string',
+  },
+  partition: {
+    optional: true,
+    type: 'string',
   },
   remote: {
     type: 'string',

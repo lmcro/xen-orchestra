@@ -10,39 +10,17 @@ import PropTypes from 'prop-types'
 import React from 'react'
 import SearchBar from 'search-bar'
 import Select from 'form/select'
+import TASK_STATUS from 'task-status'
 import Tooltip from 'tooltip'
-import { addSubscriptions, connectStore, formatSize, formatSpeed } from 'utils'
+import { addSubscriptions, connectStore, formatSize, formatSpeed, NumericDate } from 'utils'
 import { countBy, cloneDeep, filter, map } from 'lodash'
 import { createGetObjectsOfType } from 'selectors'
-import { FormattedDate } from 'react-intl'
 import { injectState, provideState } from 'reaclette'
 import { runBackupNgJob, subscribeBackupNgLogs } from 'xo'
 import { Vm, Sr, Remote, Pool } from 'render-xo-item'
+import BaseComponent from 'base-component'
 
 const hasTaskFailed = ({ status }) => status !== 'success' && status !== 'pending'
-
-const TASK_STATUS = {
-  failure: {
-    icon: 'halted',
-    label: 'taskFailed',
-  },
-  skipped: {
-    icon: 'skipped',
-    label: 'taskSkipped',
-  },
-  success: {
-    icon: 'running',
-    label: 'taskSuccess',
-  },
-  pending: {
-    icon: 'busy',
-    label: 'taskStarted',
-  },
-  interrupted: {
-    icon: 'halted',
-    label: 'taskInterrupted',
-  },
-}
 
 const TaskStateInfos = ({ status }) => {
   const { icon, label } = TASK_STATUS[status]
@@ -53,17 +31,7 @@ const TaskStateInfos = ({ status }) => {
   )
 }
 
-const TaskDate = ({ value }) => (
-  <FormattedDate
-    value={new Date(value)}
-    month='short'
-    day='numeric'
-    year='numeric'
-    hour='2-digit'
-    minute='2-digit'
-    second='2-digit'
-  />
-)
+const TaskDate = ({ value }) => <NumericDate timestamp={value} />
 
 const TaskStart = ({ task }) => <div>{_.keyValue(_('taskStart'), <TaskDate value={task.start} />)}</div>
 const TaskEnd = ({ task }) =>
@@ -127,7 +95,7 @@ class TaskWarning extends React.Component {
         <span className={className} onClick={() => this.setState({ expanded: !this.state.expanded })}>
           <Icon icon='alarm' /> {this.props.message}
         </span>
-        {this.state.expanded && (
+        {this.state.expanded && this.props.data && (
           <ul className='task-warning'>
             {Object.keys(this.props.data).map(key => (
               <li key={key}>
@@ -160,9 +128,56 @@ TaskWarnings.propTypes = {
   warnings: PropTypes.arrayOf(PropTypes.shape(TaskWarning.propTypes)),
 }
 
+class TaskInfo extends BaseComponent {
+  constructor(props) {
+    super(props)
+    this.state = {
+      expanded: false,
+    }
+  }
+  render() {
+    const className = `text-info ${this.props.data ? 'message-expandable' : ''}`
+    return (
+      <div>
+        <span className={className} onClick={this.toggleState('expanded')}>
+          <Icon icon='info' /> {this.props.message}
+        </span>
+        {this.state.expanded && this.props.data && (
+          <ul className='task-info'>
+            {Object.keys(this.props.data).map(key => (
+              <li key={key}>
+                <strong>{key}</strong>
+                <span>{JSON.stringify(this.props.data[key])}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    )
+  }
+}
+
+TaskInfo.propTypes = {
+  message: PropTypes.string.isRequired,
+  data: PropTypes.object,
+}
+
+const TaskInfos = ({ infos }) =>
+  infos !== undefined ? (
+    <div>
+      {infos.map(({ message, data }, key) => (
+        <TaskInfo message={message} data={data} key={key} />
+      ))}
+    </div>
+  ) : null
+
+TaskInfos.propTypes = {
+  infos: PropTypes.arrayOf(PropTypes.shape(TaskInfo.propTypes)),
+}
+
 const VmTask = ({ children, className, restartVmJob, task }) => (
   <li className={className}>
-    <Vm id={task.data.id} link newTab /> <TaskStateInfos status={task.status} />{' '}
+    <Vm id={task.data.id} name={task.data.name_label} link newTab /> <TaskStateInfos status={task.status} />{' '}
     {restartVmJob !== undefined && hasTaskFailed(task) && (
       <ButtonGroup>
         <ActionButton
@@ -184,6 +199,7 @@ const VmTask = ({ children, className, restartVmJob, task }) => (
       </ButtonGroup>
     )}
     <TaskWarnings warnings={task.warnings} />
+    <TaskInfos infos={task.infos} />
     {children}
     <TaskStart task={task} />
     <TaskEnd task={task} />
@@ -211,6 +227,7 @@ const PoolTask = ({ children, className, task }) => (
   <li className={className}>
     <Pool id={task.data.id} link newTab /> <TaskStateInfos status={task.status} />
     <TaskWarnings warnings={task.warnings} />
+    <TaskInfos infos={task.infos} />
     {children}
     <TaskStart task={task} />
     <TaskEnd task={task} />
@@ -223,6 +240,7 @@ const XoTask = ({ children, className, task }) => (
   <li className={className}>
     <Icon icon='menu-xoa' /> XO <TaskStateInfos status={task.status} />
     <TaskWarnings warnings={task.warnings} />
+    <TaskInfos infos={task.infos} />
     {children}
     <TaskStart task={task} />
     <TaskEnd task={task} />
@@ -235,6 +253,7 @@ const SnapshotTask = ({ className, task }) => (
   <li className={className}>
     <Icon icon='task' /> {_('snapshotVmLabel')} <TaskStateInfos status={task.status} />
     <TaskWarnings warnings={task.warnings} />
+    <TaskInfos infos={task.infos} />
     <TaskStart task={task} />
     <TaskEnd task={task} />
     <TaskError task={task} />
@@ -246,6 +265,7 @@ const CleanVmTask = ({ children, className, task }) =>
     <li className={className}>
       <Icon icon='clean-vm' /> {_('cleanVm')} <TaskStateInfos status={task.status} />
       <TaskWarnings warnings={task.warnings} />
+      <TaskInfos infos={task.infos} />
       {children}
       <TaskStart task={task} />
       <TaskEnd task={task} />
@@ -256,6 +276,7 @@ const HealthCheckTask = ({ children, className, task }) => (
   <li className={className}>
     <Icon icon='health' /> {task.message} <TaskStateInfos status={task.status} />{' '}
     <TaskWarnings warnings={task.warnings} />
+    <TaskInfos infos={task.infos} />
     {children}
     <TaskStart task={task} />
     <TaskEnd task={task} />
@@ -265,6 +286,7 @@ const HealthCheckTask = ({ children, className, task }) => (
 const HealthCheckVmStartTask = ({ children, className, task }) => (
   <li className={className}>
     <Icon icon='run' /> {task.message} <TaskStateInfos status={task.status} />
+    <TaskInfos infos={task.infos} />
     <TaskStart task={task} />
     <TaskEnd task={task} />
     <TaskError task={task} />
@@ -285,8 +307,9 @@ const RemoteTask = ({ children, className, task }) => (
 
 const SrTask = ({ children, className, task }) => (
   <li className={className}>
-    <Sr id={task.data.id} link newTab /> <TaskStateInfos status={task.status} />
+    <Sr id={task.data.id} name={task.data.name_label} link newTab /> <TaskStateInfos status={task.status} />
     <TaskWarnings warnings={task.warnings} />
+    <TaskInfos infos={task.infos} />
     {children}
     <TaskStart task={task} />
     <TaskEnd task={task} />
@@ -315,6 +338,7 @@ const TransferMergeTask = ({ className, task }) => {
       {task.message}
       <TaskStateInfos status={task.status} />
       <TaskWarnings warnings={task.warnings} />
+      <TaskInfos infos={task.infos} />
       <TaskStart task={task} />
       <TaskEnd task={task} />
       <TaskDuration task={task} />
@@ -326,6 +350,36 @@ const TransferMergeTask = ({ className, task }) => {
           {_.keyValue(_('operationSpeed'), formatSpeed(size, task.end - task.start))}
         </div>
       )}
+    </li>
+  )
+}
+
+const CloningVmTask = ({ className, task }) => {
+  return (
+    <li className={className}>
+      Cloning Vm
+      <TaskStateInfos status={task.status} />
+      <TaskWarnings warnings={task.warnings} />
+      <TaskInfos infos={task.infos} />
+      <TaskStart task={task} />
+      <TaskEnd task={task} />
+      <TaskDuration task={task} />
+      <TaskError task={task} />
+    </li>
+  )
+}
+
+const CopyingVmTask = ({ className, task }) => {
+  return (
+    <li className={className}>
+      Copying Vm
+      <TaskStateInfos status={task.status} />
+      <TaskWarnings warnings={task.warnings} />
+      <TaskInfos infos={task.infos} />
+      <TaskStart task={task} />
+      <TaskEnd task={task} />
+      <TaskDuration task={task} />
+      <TaskError task={task} />
     </li>
   )
 }
@@ -345,6 +399,8 @@ const COMPONENT_BY_MESSAGE = {
   'health check': HealthCheckTask,
   vmstart: HealthCheckVmStartTask,
   'clean-vm': CleanVmTask,
+  'cloning-vm': CloningVmTask,
+  'copying-vm': CopyingVmTask,
 }
 
 const TaskLi = ({ task, ...props }) => {
@@ -373,7 +429,8 @@ export default decorate([
           const { tasks } = parent
           if (tasks !== undefined) {
             for (const task of tasks) {
-              task.parent = parent
+              // parent should not be enumerable as it would create a cycle and break JSON.stringify
+              Object.defineProperty(task, parent, { value: parent })
               linkParent(task)
             }
           }
@@ -439,8 +496,8 @@ export default decorate([
             type === 'VM'
               ? get(() => vms[task.data.id].name_label)
               : type === 'pool'
-              ? get(() => pools[task.data.id].name_label)
-              : 'xo'
+                ? get(() => pools[task.data.id].name_label)
+                : 'xo'
 
           if (task.tasks !== undefined) {
             const subTaskWithIsFull = task.tasks.find(({ data = {} }) => data.isFull !== undefined)
@@ -465,12 +522,11 @@ export default decorate([
       },
       optionRenderer:
         ({ countByStatus }) =>
-        ({ label, value }) =>
-          (
-            <span>
-              {_(label)} ({countByStatus[value] || 0})
-            </span>
-          ),
+        ({ label, value }) => (
+          <span>
+            {_(label)} ({countByStatus[value] || 0})
+          </span>
+        ),
       countByStatus: ({ preFilteredTasksLogs }) => ({
         all: get(() => preFilteredTasksLogs.length),
         ...countBy(preFilteredTasksLogs, 'status'),
@@ -524,10 +580,11 @@ export default decorate([
   }),
   injectState,
   ({ state, effects }) => {
-    const { scheduleId, warnings, tasks = [] } = state.log
+    const { scheduleId, warnings, infos, tasks = [] } = state.log
     return tasks.length === 0 ? (
       <div>
         <TaskWarnings warnings={warnings} />
+        <TaskInfos infos={infos} />
         <TaskError task={state.log} />
       </div>
     ) : (
@@ -549,6 +606,7 @@ export default decorate([
           valueKey='value'
         />
         <TaskWarnings warnings={warnings} />
+        <TaskInfos infos={infos} />
         <br />
         <ul className='list-group'>
           {map(state.displayedTasks, taskLog => {

@@ -60,6 +60,22 @@ You only need to use a template of a VM with CloudInit installed inside it. [Che
 In XOA 5.31, we changed the cloud-init config drive type from [OpenStack](https://cloudinit.readthedocs.io/en/latest/topics/datasources/configdrive.html) to the [NoCloud](https://cloudinit.readthedocs.io/en/latest/topics/datasources/nocloud.html) type. This will allow us to pass network configuration to VMs in the future. For 99% of users, including default cloud-init installs, this change will have no effect. However if you have previously modified your cloud-init installation in a VM template to only look for `openstack` drive types (for instance with the `datasource_list` setting in `/etc/cloud/cloud.cfg`) you need to modify it to also look for `nocloud`.
 :::
 
+### Example: How to create a Cloud Init template with Ubuntu 22.04 LTS?
+
+1. Create a VM with e.g. 2 CPU, 8 GiB of RAM, 10 GiB of disk space, and install Ubuntu 22.04 LTS on it.
+2. Upon reboot, `apt update` and `apt upgrade` the machine.
+3. Install the [Guest Tools](https://docs.xcp-ng.org/vms/#%EF%B8%8F-guest-tools).
+4. Install the "cloud-initramfs-growroot" so that the VM can apply a Cloud Config:
+   ```
+   sudo apt install cloud-initramfs-growroot
+   ```
+5. Run the command `sudo cloud-init clean`.
+6. Clear out the machine-id so it can be regenerated when the template is used:
+   ```
+   sudo truncate -s 0 /etc/machine-id /var/lib/dbus/machine-id
+   ```
+7. Shutdown the VM and create a template from that image.
+
 ### Usage
 
 First, select your compatible template (CloudInit ready) and name it:
@@ -307,7 +323,7 @@ When the power outage is over, all you need to do is:
 
 Terraform is a cloud/platform agnostic tool for building, changing, and versioning infrastructure. Terraform can manage existing and popular service providers as well as custom in-house solutions (like Xen Orchestra). It can manage resources through their entire lifecycle or even manage infrastructure it didn't initially create.
 
-We sponsored a developer to build a [Xen Orchestra provider for Terraform](https://registry.terraform.io/providers/terra-farm/xenorchestra/latest), so you can use it as a central point for your whole virtualized infrastructure. The source code is [available on Github](https://github.com/terra-farm/terraform-provider-xenorchestra/), and contributions are welcome!
+We sponsored a developer to build a [Xen Orchestra provider for Terraform](https://registry.terraform.io/providers/vatesfr/xenorchestra/latest), so you can use it as a central point for your whole virtualized infrastructure. The source code is [available on Github](https://github.com/vatesfr/terraform-provider-xenorchestra/), and contributions are welcome!
 
 :::tip
 Don't miss [our blog post series about it](https://xen-orchestra.com/blog/author/ddelnano/), written by Dom Del Nano, the original developer of this provider!
@@ -323,9 +339,15 @@ From there, you can even manage your existing resources with Terraform!
 
 ## Netbox
 
-Synchronize your pools, VMs, network interfaces and IP addresses with your [Netbox](https://netbox.readthedocs.io/en/stable/) instance.
+Synchronize your pools, VMs, network interfaces and IP addresses with your [Netbox](https://docs.netbox.dev/en/stable/) instance.
 
 ![](./assets/netbox.png)
+
+## Supported versions
+
+- `>= 2.10`
+- `3.x`
+- `4.x`
 
 ### Netbox side
 
@@ -338,23 +360,45 @@ Synchronize your pools, VMs, network interfaces and IP addresses with your [Netb
 XO will try to find the right prefix for each IP address. If it can't find a prefix that fits, the IP address won't be synchronized.
 :::
 
-- Generate a token:
-  - Go to Profile > API Tokens > Add a token
-  - Create a token with "Write enabled"
-  - The owner of the token must have at least the following permissions:
-    - View permissions on:
-      - extras > custom-fields
-      - ipam > prefixes
-    - All permissions on:
-      - ipam > ip-addresses
-      - virtualization > cluster-types
-      - virtualization > clusters
-      - virtualization > interfaces
-      - virtualization > virtual-machines
-- Add a UUID custom field:
-  - Go to Other > Custom fields > Add
-  - Create a custom field called "uuid" (lower case!)
-  - Assign it to object types `virtualization > cluster` and `virtualization > virtual machine`
+- Create permissions:
+  - Go to Admin > Permissions > Add and create 2 permissions:
+    - "XO read" with action "Can view" enabled and object types:
+      - Extras > custom field
+      - IPAM > prefix
+    - "XO read-write" with all 4 actions enabled and object types:
+      - DCIM > platform
+      - Extras > tag
+      - IPAM > IP address
+      - Tenancy > tenant (if you want to synchronize XO users with Netbox tenants)
+      - Virtualization > cluster
+      - Virtualization > cluster type
+      - Virtualization > virtual machine
+      - Virtualization > interface
+
+![](./assets/netbox-permissions.png)
+
+- Create a Netbox user:
+  - Go to Admin > Users > Add
+  - Choose a username and a password
+  - Scroll down to Permissions and select the 2 permissions "XO read" and "XO read-write"
+- Create an API token:
+  - Got to Admin > API Tokens > Add
+  - Select the user you just created
+  - Copy the token for the next step
+  - Make sure "Write enabled" is checked and create it
+
+:::warning
+For testing purposes, you can create an API token bound to a Netbox superuser account, but once in production, it is highly recommended to create a dedicated user with only the required permissions.
+:::
+
+- Create a UUID custom field:
+  - Go to Customization > Custom Fields > Add
+  - Select object types:
+    - Tenancy > tenant (if you want to synchronize XO users with Netbox tenants)
+    - Virtualization > cluster
+    - Virtualization > virtual machine
+    - Virtualization > interface
+  - Name it "uuid" (lower case!)
 
 ![](./assets/customfield.png)
 
@@ -369,9 +413,14 @@ In Netbox 2.x, custom fields can be created from the Admin panel > Custom fields
   - Unauthorized certificate: only for HTTPS, enable this option if your Netbox instance uses a self-signed SSL certificate
   - Token: the token you generated earlier
   - Pools: the pools you wish to automatically synchronize with Netbox
+  - Synchronize users: enable this if you wish to synchronize XO users with Netbox tenants. Tenants will be assigned to the VMs the XO user _created_ within XO. Important: if you want to enable this feature, you also need to assign the custom field "uuid" that you created in the previous step to the type "Tenancy > tenant".
   - Interval: the time interval (in hours) between 2 auto-synchronizations. Leave empty if you don't want to synchronize automatically.
 - Load the plugin (button next to the plugin's name)
 - Manual synchronization: if you correctly configured and loaded the plugin, a "Synchronize with Netbox" button will appear in every pool's Advanced tab, which allows you to manually synchronize it with Netbox
+
+:::tip
+If you get a `403 Forbidden` error when testing the plugin, make sure you correctly configured the "Allowed IPs" for the token you are using.
+:::
 
 ## Recipes
 

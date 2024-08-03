@@ -28,7 +28,7 @@ Open a secure support tunnel so our team can remotely investigate on your XOA. F
 
 If your web UI is not working, you can also open the secure support tunnel from the CLI. To open a private tunnel (we are the only one with the private key), you can use the command `xoa support tunnel` like below:
 
-```
+```console
 $ xoa support tunnel
 The support tunnel has been created.
 
@@ -58,18 +58,18 @@ Please only use this if you have issues with [the default way to deploy XOA](ins
 
 ### Via a bash script
 
-Alternatively, you can deploy it by connecting to your XenServer host and executing the following:
+Alternatively, you can deploy it by connecting to your XCP-ng/XenServer host and executing the following:
 
-```
+```sh
 bash -c "$(wget -qO- https://xoa.io/deploy)"
 ```
 
 :::tip
-This won't write or modify anything on your XenServer host: it will just import the XOA VM into your default storage repository.
+This won't write or modify anything on your XCP-ng/XenServer host: it will just import the XOA VM into your default storage repository.
 :::
 
 :::warning
-If you are using an old XenServer version, you may get a `curl` error:
+If you are using an old XCP-ng/XenServer version, you may get a `curl` error:
 
 ```
 curl: (35) error:1407742E:SSL routines:SSL23_GET_SERVER_HELLO:tlsv1 alert protocol version
@@ -77,7 +77,7 @@ curl: (35) error:1407742E:SSL routines:SSL23_GET_SERVER_HELLO:tlsv1 alert protoc
 
 It means that the secure HTTPS protocol is not supported, you can bypass this using the unsecure command instead:
 
-```
+```sh
 bash -c "$(wget -qO- http://xoa.io/deploy)"
 ```
 
@@ -93,21 +93,36 @@ Follow the instructions:
 
 You can also download XOA from xen-orchestra.com in an XVA file. Once you've got the XVA file, you can import it with `xe vm-import filename=xoa_unified.xva` or via XenCenter.
 
+If you want to use static IP address for your appliance:
+
+```sh
+xe vm-param-set uuid="$uuid" \
+  xenstore-data:vm-data/ip="$ip" \
+  xenstore-data:vm-data/netmask="$netmask" \
+  xenstore-data:vm-data/gateway="$gateway"
+```
+
+If you want to replace the default DNS server:
+
+```sh
+xe vm-param-set uuid="$uuid" xenstore-data:vm-data/dns="$dns"
+```
+
 After the VM is imported, you just need to start it with `xe vm-start vm="XOA"` or with XenCenter.
 
 ## First console connection
 
-### Deployed with the [web deploy form](https://xen-orchestra.com/#!/xoa)
+### Deployed with the [web deploy form](https://vates.tech/deploy/)
 
 In that case, you already set the password for `xoa` user. If you forgot it, see below.
 
 ### Manually deployed
 
-If you connect via SSH or console for the first time without using our [web deploy form](https://xen-orchestra.com/#!/xoa), be aware **there is NO default password set for security reasons**. To set it, you need to connect to your host to find the XOA VM UUID (eg via `xe vm-list`).
+If you connect via SSH or console for the first time without using our [web deploy form](https://vates.tech/deploy/), be aware **there is NO default password set for security reasons**. To set it, you need to connect to your host to find the XOA VM UUID (eg via `xe vm-list`).
 
 Next, you can replace `<UUID>` with the UUID you found previously, and `<password>` with your password:
 
-```
+```sh
 xe vm-param-set uuid=<UUID> xenstore-data:vm-data/system-account-xoa-password=<password>
 ```
 
@@ -123,8 +138,8 @@ You can now connect with the `xoa` username and password you defined in the prev
 
 To avoid typing `sudo` for any admin command, you can have a root shell with `sudo -s`:
 
-```
-[05:24 27] xoa@xoa:~$ sudo -s
+```console
+$ sudo -s
 
 We trust you have received the usual lecture from the local System
 Administrator. It usually boils down to these three things:
@@ -134,18 +149,16 @@ Administrator. It usually boils down to these three things:
     #3) With great power comes great responsibility.
 
 [sudo] password for xoa:
-[05:24 27] xoa:xoa$
-
+$
 ```
 
 ## Network configuration
 
 XOA uses **DHCP** by default, so if you need to configure the IP address, please run the command `xoa network static`. It will ask you network details:
 
-```
+```console
 $ xoa network static
-? Static IP for this machine 192.168.100.120
-? Network mask (eg 255.255.255.0) 255.255.255.0
+? Static IP for this machine 192.168.100.120/24
 ? Gateway 192.168.100.254
 ? IP of the DNS server 192.168.100.254
 ```
@@ -158,14 +171,23 @@ If you want to go back in DHCP, just run `xoa network dhcp`
 
 ### Other interfaces
 
-If you need to configure other interfaces than `eth0`, you can use the same commands with the name of the interface to configure as supplementary argument:
+If you need to configure other interfaces than the default one, you can use the same commands with the name of the interface to configure as supplementary argument:
 
-```
-$ xoa network static eth1
+```console
+$ xoa network static enX1
 ? Static IP for this machine 192.168.100.120
 ? Network mask (eg 255.255.255.0) 255.255.255.0
 
-$ xoa network dhcp eth1
+$ xoa network dhcp enX1
+```
+
+## Secondary IP addresses
+
+To add more IP addresses on an already configured interface, you can use the `--add` flag:
+
+```
+$ xoa network static --add
+? Static IP for this machine 192.168.200.120/24
 ```
 
 ## Firewall

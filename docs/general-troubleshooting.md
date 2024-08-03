@@ -4,7 +4,7 @@
 
 If you think you have a problem with your XOA, start by typing`xoa check`command in your terminal:
 
-```
+```console
 $ xoa check
 ✔ Node version
 ✔ Disk space for /var
@@ -18,7 +18,7 @@ $ xoa check
 If the result you have is completely different from that, or if error messages are displayed, lost packets, etc., you have, indeed, a problem. The next step should be to check in this document if there is an existing troubleshooting for the problem you have.
 
 :::tip
-You can also access the log by using this command: `$ tail -f /var/log/syslog` ([learn more](https://xen-orchestra.com/docs/logs.html))
+You can also check the system logs, [as explained here](https://xen-orchestra.com/docs/troubleshooting.html#cli).
 :::
 
 ## General

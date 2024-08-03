@@ -1,38 +1,39 @@
 import Disposable from 'promise-toolbox/Disposable'
 import fromCallback from 'promise-toolbox/fromCallback'
 import { asyncMap } from '@xen-orchestra/async-map'
-import { Backup } from '@xen-orchestra/backups/Backup.js'
 import { compose } from '@vates/compose'
 import { createLogger } from '@xen-orchestra/log'
 import { decorateMethodsWith } from '@vates/decorate-with'
 import { deduped } from '@vates/disposable/deduped.js'
-import { defer } from 'golike-defer'
-import { DurablePartition } from '@xen-orchestra/backups/DurablePartition.js'
+import { DurablePartition } from '@xen-orchestra/backups/DurablePartition.mjs'
 import { execFile } from 'child_process'
-import { formatVmBackups } from '@xen-orchestra/backups/formatVmBackups.js'
-import { ImportVmBackup } from '@xen-orchestra/backups/ImportVmBackup.js'
+import { formatVmBackups } from '@xen-orchestra/backups/formatVmBackups.mjs'
+import { createRunner } from '@xen-orchestra/backups/Backup.mjs'
+import { ImportVmBackup } from '@xen-orchestra/backups/ImportVmBackup.mjs'
 import { JsonRpcError } from 'json-rpc-protocol'
 import { Readable } from 'stream'
-import { RemoteAdapter } from '@xen-orchestra/backups/RemoteAdapter.js'
-import { RestoreMetadataBackup } from '@xen-orchestra/backups/RestoreMetadataBackup.js'
-import { runBackupWorker } from '@xen-orchestra/backups/runBackupWorker.js'
-import { Task } from '@xen-orchestra/backups/Task.js'
+import { RemoteAdapter } from '@xen-orchestra/backups/RemoteAdapter.mjs'
+import { RestoreMetadataBackup } from '@xen-orchestra/backups/RestoreMetadataBackup.mjs'
+import { runBackupWorker } from '@xen-orchestra/backups/runBackupWorker.mjs'
+import { Task } from '@xen-orchestra/backups/Task.mjs'
 import { Xapi } from '@xen-orchestra/xapi'
 
 const noop = Function.prototype
 
 const { warn } = createLogger('xo:proxy:backups')
 
-const runWithLogs = (runner, args) =>
+const runWithLogs = (runner, args, onEnd) =>
   new Readable({
     objectMode: true,
     read() {
       this._read = noop
 
-      runner(args, log => this.push(log)).then(
-        () => this.push(null),
-        error => this.emit('error', error)
-      )
+      runner(args, log => this.push(log))
+        .then(
+          () => this.push(null),
+          error => this.emit('error', error)
+        )
+        .then(onEnd)
     },
   })[Symbol.asyncIterator]()
 
@@ -52,7 +53,7 @@ export default class Backups {
       const config = app.config.get('backups')
       if (config.disableWorkers) {
         const { recordToXapi, remotes, xapis, ...rest } = params
-        return new Backup({
+        return createRunner({
           ...rest,
 
           config,
@@ -174,12 +175,15 @@ export default class Backups {
           },
         ],
         fetchPartitionFiles: [
-          ({ disk: diskId, remote, partition: partitionId, paths }) =>
-            Disposable.use(this.getAdapter(remote), adapter => adapter.fetchPartitionFiles(diskId, partitionId, paths)),
+          ({ disk: diskId, format, remote, partition: partitionId, paths }) =>
+            Disposable.use(this.getAdapter(remote), adapter =>
+              adapter.fetchPartitionFiles(diskId, partitionId, paths, format)
+            ),
           {
             description: 'fetch files from partition',
             params: {
               disk: { type: 'string' },
+              format: { type: 'string', default: 'zip' },
               partition: { type: 'string', optional: true },
               paths: { type: 'array', items: { type: 'string' } },
               remote: { type: 'object' },
@@ -187,30 +191,41 @@ export default class Backups {
           },
         ],
         importVmBackup: [
-          defer(($defer, { backupId, remote, srUuid, settings, streamLogs = false, xapi: xapiOpts }) =>
-            Disposable.use(this.getAdapter(remote), this.getXapi(xapiOpts), async (adapter, xapi) => {
-              const metadata = await adapter.readVmBackupMetadata(backupId)
-              const run = () => new ImportVmBackup({ adapter, metadata, settings, srUuid, xapi }).run()
-              return streamLogs
-                ? runWithLogs(
-                    async (args, onLog) =>
-                      Task.run(
-                        {
-                          data: {
-                            backupId,
-                            jobId: metadata.jobId,
-                            srId: srUuid,
-                            time: metadata.timestamp,
-                          },
-                          name: 'restore',
-                          onLog,
-                        },
-                        run
-                      ).catch(() => {}) // errors are handled by logs
-                  )
-                : run()
-            })
-          ),
+          async ({ backupId, remote, srUuid, settings, streamLogs = false, xapi: xapiOpts }) => {
+            const {
+              dispose,
+              value: [adapter, xapi],
+            } = await Disposable.all([this.getAdapter(remote), this.getXapi(xapiOpts)])
+
+            const metadata = await adapter.readVmBackupMetadata(backupId)
+            const run = () => new ImportVmBackup({ adapter, metadata, settings, srUuid, xapi }).run()
+
+            if (streamLogs) {
+              return runWithLogs(
+                async (args, onLog) =>
+                  Task.run(
+                    {
+                      data: {
+                        backupId,
+                        jobId: metadata.jobId,
+                        srId: srUuid,
+                        time: metadata.timestamp,
+                      },
+                      name: 'restore',
+                      onLog,
+                    },
+                    run
+                  ).catch(() => {}), // errors are handled by logs,
+                dispose
+              )
+            }
+
+            try {
+              return await run()
+            } finally {
+              await dispose()
+            }
+          },
           {
             description: 'create a new VM from a backup',
             params: {

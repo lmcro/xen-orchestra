@@ -365,9 +365,6 @@ export default {
   // Original text: 'IPs'
   settingsIpsPage: 'IPs',
 
-  // Original text: 'Config'
-  settingsConfigPage: 'Configurazione',
-
   // Original text: 'About'
   aboutPage: 'Informazioni',
 
@@ -516,10 +513,10 @@ export default {
   homeWelcome: 'Benvenuti in Xen Orchestra!',
 
   // Original text: 'Add your XCP-ng hosts or pools'
-  homeWelcomeText: 'Aggiungi i tuoi hosts o pools XenServer',
+  homeWelcomeText: 'Aggiungi i tuoi hosts o pools XCP-ng',
 
-  // Original text: 'Some XenServers have been registered but are not connected'
-  homeConnectServerText: 'Alcuni XenServers sono stati registrati ma non sono collegati',
+  // Original text: 'Some XCP-ng hosts have been registered but are not connected'
+  homeConnectServerText: 'Alcuni XCP-ng hosts sono stati registrati ma non sono collegati',
 
   // Original text: 'Want some help?'
   homeHelp: 'Vuoi un aiuto?',
@@ -683,14 +680,29 @@ export default {
   // Original text: 'High Availability'
   highAvailability: 'Alta disponibilità',
 
+  // Original text: 'Select Kubernetes version'
+  recipeSelectK8sVersion: 'Selezionare la versione di Kubernetes',
+
+  // Original text: 'Control plane fault tolerance'
+  recipeFaultTolerance: 'Tolleranza ai guasti del piano di controllo',
+
+  // Original text: 'No fault tolerance (one control plane)'
+  recipeNoneFaultTolerance: 'No fault tolerance (one control plane)',
+
+  // Original text: 'One fault tolerance (three control planes)'
+  recipeOneFaultTolerance: 'Una tolleranza ai guasti (tre piani di controllo)',
+
+  // Original text: 'Two fault tolerances (five control planes)'
+  recipeTwoFaultTolerance: 'Due tolleranze di errore (cinque piani di controllo)',
+
+  // Original text: 'Three fault tolerances (seven control planes)'
+  recipeThreeFaultTolerance: 'Tre tolleranze di errore (sette piani di controllo)',
+
   // Original text: 'Shared {type}'
   srSharedType: 'Condiviso {type}',
 
   // Original text: 'Host time and XOA time are not consistent with each other'
   warningHostTimeTooltip: "L'ora dello host e l'ora XOA non sono coerenti tra loro",
-
-  // Original text: 'Select from existing tags'
-  selectExistingTags: 'Seleziona da etichette esistenti',
 
   // Original text: 'Name'
   snapshotVmsName: 'Nome',
@@ -2372,9 +2384,6 @@ export default {
   // Original text: 'Invalid parameters'
   configIpErrorTitle: 'Parametri non validi',
 
-  // Original text: 'IP address and netmask required'
-  configIpErrorMessage: 'Indirizzo IP e maschera di rete richiesti',
-
   // Original text: 'Static IP address'
   staticIp: 'Indirizzo IP statico',
 
@@ -3746,8 +3755,8 @@ export default {
   // Original text: 'To SR:'
   vmImportToSr: 'Per SR:',
 
-  // Original text: 'VMs to import'
-  vmsToImport: 'VMs da importare',
+  // Original text: 'VM{nVms, plural, one {} other {s}} to import'
+  vmsToImport: 'VM{nVms, plural, one {} other {s}} da importare',
 
   // Original text: 'Reset'
   importVmsCleanList: 'Ripristina',
@@ -3779,8 +3788,8 @@ export default {
   // Original text: 'VDI export starting…'
   startVdiExport: "Inizio dell'esportazione VDI…",
 
-  // Original text: 'N CPUs'
-  nCpus: 'N CPUs',
+  // Original text: 'Number of CPUs'
+  nCpus: undefined,
 
   // Original text: 'Memory'
   vmMemory: 'Memoria',
@@ -3818,8 +3827,8 @@ export default {
   // Original text: 'Disk import success'
   diskImportSuccess: 'Importazione del disco riuscita',
 
-  // Original text: 'Drop VMDK or VHD files here to import disks.'
-  dropDisksFiles: 'Rilascia qui i file ISO, VMDK o VHD per importare i dischi.',
+  // Original text: 'Drop {types} files here to import disks.'
+  dropDisksFiles: 'Rilascia qui i file {types} per importare i dischi.',
 
   // Original text: 'To SR'
   importToSr: 'A SR',
@@ -4682,12 +4691,6 @@ export default {
   // Original text: 'No host selected to be added'
   addHostNoHostMessage: 'Nessun host selezionato da aggiungere',
 
-  // Original text: 'Xen Orchestra server'
-  xenOrchestraServer: 'Server Xen Orchestra',
-
-  // Original text: 'Xen Orchestra web client'
-  xenOrchestraWeb: 'Client web Xen Orchestra',
-
   // Original text: 'Professional support missing!'
   noProSupport: 'Manca il supporto professionale!',
 
@@ -5033,8 +5036,9 @@ export default {
   // Original text: 'Add OTP authentication'
   addOtpConfirm: 'Aggiungi autenticazione OTP',
 
-  // Original text: 'Are you sure you want to add OTP authentication?'
-  addOtpConfirmMessage: "Sei sicuro di voler aggiungere l'autenticazione OTP?",
+  // Original text: 'To enable OTP authentication, add it to your application and then enter your current password to validate.'
+  addOtpConfirmMessage:
+    "Per abilitare l'autenticazione OTP, aggiungila alla tua applicazione e quindi inserisci la password corrente per convalidare.",
 
   // Original text: 'Remove OTP authentication'
   removeOtpConfirm: 'Rimuovi autenticazione OTP',
@@ -5662,17 +5666,14 @@ export default {
   // Original text: 'Network'
   network: 'Rete',
 
-  // Original text: 'Master name'
-  recipeMasterNameLabel: 'Nome Master',
+  // Original text: 'Cluster name'
+  recipeClusterNameLabel: 'Nome cluster',
 
   // Original text: 'Number of nodes'
   recipeNumberOfNodesLabel: 'Numero di nodi',
 
   // Original text: 'SSH key'
   recipeSshKeyLabel: 'Chiave SSH',
-
-  // Original text: 'Network CIDR'
-  recipeNetworkCidr: 'Rete CIDR',
 
   // Original text: 'Action/Event'
   auditActionEvent: 'Azione/Evento',

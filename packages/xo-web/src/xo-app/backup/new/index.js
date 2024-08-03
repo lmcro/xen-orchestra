@@ -21,7 +21,7 @@ import { generateId, linkState } from 'reaclette-utils'
 import { injectIntl } from 'react-intl'
 import { injectState, provideState } from 'reaclette'
 import { Map } from 'immutable'
-import { Number } from 'form'
+import { Number, Toggle } from 'form'
 import { renderXoItemFromId, Remote } from 'render-xo-item'
 import { SelectRemote, SelectSr, SelectVm } from 'select-objects'
 import {
@@ -47,6 +47,7 @@ import getSettingsWithNonDefaultValue from '../_getSettingsWithNonDefaultValue'
 import { canDeltaBackup, constructPattern, destructPattern, FormFeedback, FormGroup, Input, Li, Ul } from './../utils'
 
 export NewMetadataBackup from './metadata'
+export NewMirrorBackup from './mirror'
 
 // ===================================================================
 
@@ -60,7 +61,7 @@ const DEFAULT_SCHEDULE = {
 }
 const RETENTION_LIMIT = 50
 
-const ReportRecipients = decorate([
+export const ReportRecipients = decorate([
   provideState({
     initialState: () => ({
       recipient: '',
@@ -127,7 +128,7 @@ const ReportRecipients = decorate([
 
 const SR_BACKEND_FAILURE_LINK = 'https://xen-orchestra.com/docs/backup_troubleshooting.html#sr-backend-failure-44'
 
-const BACKUP_NG_DOC_LINK = 'https://xen-orchestra.com/docs/backup.html'
+export const BACKUP_NG_DOC_LINK = 'https://xen-orchestra.com/docs/backup.html'
 
 const ThinProvisionedTip = ({ label }) => (
   <Tooltip content={_(label)}>
@@ -144,9 +145,11 @@ const normalizeSettings = ({ copyMode, exportMode, offlineBackupActive, settings
     defined(setting.copyRetention, setting.exportRetention, setting.snapshotRetention) !== undefined
       ? {
           ...setting,
+          cbtDestroySnapshotData: undefined,
           copyRetention: copyMode ? setting.copyRetention : undefined,
           exportRetention: exportMode ? setting.exportRetention : undefined,
           snapshotRetention: snapshotMode && !offlineBackupActive ? setting.snapshotRetention : undefined,
+          preferNbd: undefined,
         }
       : setting
   )
@@ -181,11 +184,15 @@ const getInitialState = ({ preSelectedVmIds, setHomeVmIdsSelection, suggestedExc
     _proxyId: undefined,
     _vmsPattern: undefined,
     backupMode: false,
+    cbtDestroySnapshotData: false,
     compression: undefined,
     crMode: false,
     deltaMode: false,
     drMode: false,
     name: '',
+    nbdConcurrency: 1,
+    nRetriesVmBackupFailures: 0,
+    preferNbd: false,
     remotes: [],
     schedules: {},
     settings: undefined,
@@ -198,7 +205,7 @@ const getInitialState = ({ preSelectedVmIds, setHomeVmIdsSelection, suggestedExc
   }
 }
 
-const DeleteOldBackupsFirst = ({ handler, handlerParam, value }) => (
+export const DeleteOldBackupsFirst = ({ handler, handlerParam, value }) => (
   <ActionButton
     handler={handler}
     handlerParam={handlerParam}
@@ -212,12 +219,11 @@ const DeleteOldBackupsFirst = ({ handler, handlerParam, value }) => (
 )
 
 const New = decorate([
-  New => props =>
-    (
-      <Upgrade place='newBackup' required={2}>
-        <New {...props} />
-      </Upgrade>
-    ),
+  New => props => (
+    <Upgrade place='newBackup' required={2}>
+      <New {...props} />
+    </Upgrade>
+  ),
   connectStore(() => ({
     hostsById: createGetObjectsOfType('host'),
     poolsById: createGetObjectsOfType('pool'),
@@ -608,6 +614,11 @@ const New = decorate([
           fullInterval,
         })
       },
+      setMaxExportRate({ setGlobalSettings }, rate) {
+        setGlobalSettings({
+          maxExportRate: rate !== undefined ? rate * (1024 * 1024) : undefined,
+        })
+      },
       setOfflineBackup:
         ({ setGlobalSettings }, { target: { checked: offlineBackup } }) =>
         () => {
@@ -615,12 +626,41 @@ const New = decorate([
             offlineBackup,
           })
         },
+      setPreferNbd:
+        ({ setGlobalSettings }, preferNbd) =>
+        () => {
+          setGlobalSettings({
+            preferNbd,
+          })
+        },
+      setCbtDestroySnapshotData:
+        ({ setGlobalSettings }, cbtDestroySnapshotData) =>
+        () => {
+          setGlobalSettings({
+            cbtDestroySnapshotData,
+          })
+        },
+      setNbdConcurrency({ setGlobalSettings }, nbdConcurrency) {
+        setGlobalSettings({
+          nbdConcurrency,
+        })
+      },
+      setNRetriesVmBackupFailures({ setGlobalSettings }, nRetries) {
+        setGlobalSettings({
+          nRetriesVmBackupFailures: nRetries,
+        })
+      },
     },
     computed: {
       compressionId: generateId,
       formId: generateId,
       inputConcurrencyId: generateId,
+      inputCbtDestroySnapshotData: generateId,
       inputFullIntervalId: generateId,
+      inputMaxExportRate: generateId,
+      inputPreferNbd: generateId,
+      inputNbdConcurrency: generateId,
+      inputNRetriesVmBackupFailures: generateId,
       inputTimeoutId: generateId,
 
       // In order to keep the user preference, the offline backup is kept in the DB
@@ -728,11 +768,16 @@ const New = decorate([
     const { propSettings, settings = propSettings } = state
     const compression = defined(state.compression, job.compression, '')
     const {
+      cbtDestroySnapshotData,
       checkpointSnapshot,
       concurrency,
       fullInterval,
+      maxExportRate,
+      nbdConcurrency = 1,
+      nRetriesVmBackupFailures = 0,
       offlineBackup,
       offlineSnapshot,
+      preferNbd,
       reportRecipients,
       reportWhen = 'failure',
       timeout,
@@ -965,6 +1010,17 @@ const New = decorate([
                         />
                       </FormGroup>
                       <FormGroup>
+                        <label htmlFor={state.inputNRetriesVmBackupFailures}>
+                          <strong>{_('nRetriesVmBackupFailures')}</strong>
+                        </label>
+                        <Number
+                          id={state.inputNRetriesVmBackupFailures}
+                          min={0}
+                          onChange={effects.setNRetriesVmBackupFailures}
+                          value={nRetriesVmBackupFailures}
+                        />
+                      </FormGroup>
+                      <FormGroup>
                         <label htmlFor={state.inputTimeoutId}>
                           <strong>{_('timeout')}</strong>
                         </label>{' '}
@@ -991,7 +1047,7 @@ const New = decorate([
                           <Tooltip content={_('clickForMoreInformation')}>
                             <a
                               className='text-info'
-                              href='https://xen-orchestra.com/docs/delta_backups.html#full-backup-interval'
+                              href='https://xen-orchestra.com/docs/incremental_backups.html#key-backup-interval'
                               rel='noopener noreferrer'
                               target='_blank'
                             >
@@ -1005,6 +1061,74 @@ const New = decorate([
                           />
                         </FormGroup>
                       )}
+                      {state.isDelta && (
+                        <div>
+                          <FormGroup>
+                            <label htmlFor={state.inputPreferNbd}>
+                              <strong>{_('preferNbd')}</strong>{' '}
+                              <Tooltip content={_('preferNbdInformation')}>
+                                <Icon icon='info' />
+                              </Tooltip>
+                            </label>
+                            <Toggle
+                              className='pull-right'
+                              id={state.inputPreferNbd}
+                              name='preferNbd'
+                              value={preferNbd}
+                              onChange={effects.setPreferNbd}
+                            />
+                          </FormGroup>
+                          <FormGroup>
+                            <label htmlFor={state.inputCbtDestroySnapshotData}>
+                              <strong>{_('cbtDestroySnapshotData')}</strong>{' '}
+                              <Tooltip content={_('cbtDestroySnapshotDataInformation')}>
+                                <Icon icon='info' />
+                              </Tooltip>
+                            </label>
+                            <Tooltip
+                              content={
+                                !preferNbd || state.snapshotMode
+                                  ? _('cbtDestroySnapshotDataDisabledInformation')
+                                  : undefined
+                              }
+                            >
+                              <Toggle
+                                className='pull-right'
+                                id={state.cbtDestroySnapshotData}
+                                name='cbtDestroySnapshotData'
+                                value={preferNbd && cbtDestroySnapshotData && !state.snapshotMode}
+                                disabled={!preferNbd || state.snapshotMode}
+                                onChange={effects.setCbtDestroySnapshotData}
+                              />
+                            </Tooltip>
+                          </FormGroup>
+                        </div>
+                      )}
+                      {state.isDelta && (
+                        <FormGroup>
+                          <label htmlFor={state.inputNbdConcurrency}>
+                            <strong>{_('nbdConcurrency')}</strong>
+                          </label>
+                          <Number
+                            id={state.inputNbdConcurrency}
+                            min={1}
+                            onChange={effects.setNbdConcurrency}
+                            value={nbdConcurrency}
+                            disabled={!state.inputPreferNbd}
+                          />
+                        </FormGroup>
+                      )}
+                      <FormGroup>
+                        <label htmlFor={state.inputMaxExportRate}>
+                          <strong>{_('speedLimit')}</strong>
+                        </label>
+                        <Number
+                          id={state.inputMaxExportRate}
+                          min={0}
+                          onChange={effects.setMaxExportRate}
+                          value={maxExportRate / (1024 * 1024)}
+                        />
+                      </FormGroup>
                       {state.isFull && (
                         <div>
                           <FormGroup>

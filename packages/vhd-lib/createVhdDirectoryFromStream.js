@@ -38,6 +38,7 @@ const buildVhd = Disposable.wrap(async function* (handler, path, inputStream, { 
     }
   )
   await Promise.all([vhd.writeFooter(), vhd.writeHeader(), vhd.writeBlockAllocationTable()])
+  return vhd.streamSize()
 })
 
 exports.createVhdDirectoryFromStream = async function createVhdDirectoryFromStream(
@@ -47,10 +48,11 @@ exports.createVhdDirectoryFromStream = async function createVhdDirectoryFromStre
   { validator, concurrency = 16, compression } = {}
 ) {
   try {
-    await buildVhd(handler, path, inputStream, { concurrency, compression })
+    const size = await buildVhd(handler, path, inputStream, { concurrency, compression })
     if (validator !== undefined) {
       await validator.call(this, path)
     }
+    return size
   } catch (error) {
     // cleanup on error
     await handler.rmtree(path).catch(warn)

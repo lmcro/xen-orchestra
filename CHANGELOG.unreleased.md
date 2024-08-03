@@ -3,6 +3,10 @@
 > Keep in mind the changelog is addressed to **users** and should be
 > understandable by them.
 
+### Security
+
+> Security fixes and new features should go in this section
+
 ### Enhancements
 
 > Users must be able to say: “Nice enhancement, I'm eager to test it”
@@ -15,7 +19,7 @@
 
 > When modifying a package, add it here with its release type.
 >
-> The format is the following: - `$packageName` `$releaseType`
+> The format is the following: `- $packageName $releaseType`
 >
 > Where `$releaseType` is
 >
@@ -26,10 +30,5 @@
 > Keep this list alphabetically ordered to avoid merge conflicts
 
 <!--packages-start-->
-
-- @vates/read-chunk patch
-- xo-remote-parser patch
-- xo-server-transport-nagios patch
-- xo-web patch
 
 <!--packages-end-->

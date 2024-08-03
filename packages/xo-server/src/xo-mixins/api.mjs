@@ -1,7 +1,7 @@
 import emitAsync from '@xen-orchestra/emit-async'
+import Obfuscate from '@vates/obfuscate'
 import { createLogger } from '@xen-orchestra/log'
 
-import Ajv from 'ajv'
 import cloneDeep from 'lodash/cloneDeep.js'
 import forEach from 'lodash/forEach.js'
 import kindOf from 'kindof'
@@ -10,11 +10,11 @@ import { AsyncLocalStorage } from 'async_hooks'
 import { format, JsonRpcError, MethodNotFound } from 'json-rpc-peer'
 
 import * as methods from '../api/index.mjs'
-import * as sensitiveValues from '../sensitive-values.mjs'
 import Connection from '../connection.mjs'
 import { noop, serializeError } from '../utils.mjs'
 
 import * as errors from 'xo-common/api-errors.js'
+import { compileXoJsonSchema } from './_xoJsonSchema.mjs'
 
 // ===================================================================
 
@@ -25,6 +25,29 @@ const ALLOWED_METHOD_PROPS = {
   params: true,
   permission: true,
   resolve: true,
+}
+
+const NO_LOG_METHODS = {
+  __proto__: null,
+
+  // 2021-02-11: Work-around: ECONNREFUSED error can be triggered by
+  // 'host.stats' method because there is no connection to the host during a
+  // toolstack restart and xo-web may call it often
+  'host.stats': true,
+
+  // 2020-07-10: Work-around: many kinds of error can be triggered by
+  // 'pool.listMissingPatches' method, which can generates a lot of logs due to the fact that xo-web
+  // uses 5s active subscriptions to call it.
+  'pool.listMissingPatches': true,
+
+  // 2024-02-05: Work-around: in case of XO Proxy errors, `proxy.getApplianceUpdaterState` will
+  // flood the logs.
+  'proxy.getApplianceUpdaterState': true,
+
+  // 2024-07-09 work-around to avoid flood of MESSAGE_METHOD_UNKNOWN and failed XO tasks
+  // because following methods are not available in XAPIs older than 8.3,
+  'pool.getGuestSecureBootReadiness': true,
+  'vm.getSecurebootReadiness': true,
 }
 
 const PERMISSIONS = {
@@ -56,13 +79,39 @@ const XAPI_ERROR_TO_XO_ERROR = {
 
 const hasPermission = (actual, expected) => PERMISSIONS[actual] >= PERMISSIONS[expected]
 
-const ajv = new Ajv({ allErrors: true, allowUnionTypes: true })
-
 function checkParams(method, params) {
+  // Parameters suffixed by `?` are marked as ignorable by the client and
+  // ignored if unsupported by this version of the API
+  //
+  // This simplifies compatibility with older version of the API if support
+  // of the parameter is preferable but not necessary
+  const ignorableParams = new Set()
+  for (const key of Object.keys(params)) {
+    if (key.endsWith('?')) {
+      const rawKey = key.slice(0, -1)
+      if (Object.hasOwn(params, rawKey)) {
+        throw new Error(`conflicting keys: ${rawKey} and ${key}`)
+      }
+      params[rawKey] = params[key]
+      delete params[key]
+      ignorableParams.add(rawKey)
+    }
+  }
+
   const { validate } = method
   if (validate !== undefined) {
     if (!validate(params)) {
-      throw errors.invalidParameters(validate.errors)
+      const vErrors = new Set(validate.errors)
+      for (const error of vErrors) {
+        if (error.schemaPath === '#/additionalProperties' && ignorableParams.has(error.params.additionalProperty)) {
+          delete params[error.params.additionalProperty]
+          vErrors.delete(error)
+        }
+      }
+
+      if (vErrors.size !== 0) {
+        throw errors.invalidParameters(Array.from(vErrors))
+      }
     }
   }
 }
@@ -87,73 +136,6 @@ function checkPermission(method) {
   if (!hasPermission(apiContext.permission, permission)) {
     throw errors.unauthorized(permission)
   }
-}
-
-function adaptJsonSchema(schema) {
-  if (schema.enum !== undefined) {
-    return schema
-  }
-
-  const is = (({ type }) => {
-    if (typeof type === 'string') {
-      return t => t === type
-    }
-    const types = new Set(type)
-    return t => types.has(t)
-  })(schema)
-
-  if (is('array')) {
-    const { items } = schema
-    if (items !== undefined) {
-      if (Array.isArray(items)) {
-        for (let i = 0, n = items.length; i < n; ++i) {
-          items[i] = adaptJsonSchema(items[i])
-        }
-      } else {
-        schema.items = adaptJsonSchema(items)
-      }
-    }
-  }
-
-  if (is('object')) {
-    const { properties = {} } = schema
-    let keys = Object.keys(properties)
-
-    for (const key of keys) {
-      properties[key] = adaptJsonSchema(properties[key])
-    }
-
-    const { additionalProperties } = schema
-    if (additionalProperties === undefined) {
-      const wildCard = properties['*']
-      if (wildCard === undefined) {
-        // we want additional properties to be disabled by default unless no properties are defined
-        schema.additionalProperties = keys.length === 0
-      } else {
-        delete properties['*']
-        keys = Object.keys(properties)
-        schema.additionalProperties = wildCard
-      }
-    } else if (typeof additionalProperties === 'object') {
-      schema.additionalProperties = adaptJsonSchema(additionalProperties)
-    }
-
-    // we want properties to be required by default unless explicitly marked so
-    // we use property `optional` instead of object `required`
-    if (schema.required === undefined) {
-      const required = keys.filter(key => {
-        const value = properties[key]
-        const required = !value.optional
-        delete value.optional
-        return required
-      })
-      if (required.length !== 0) {
-        schema.required = required
-      }
-    }
-  }
-
-  return schema
 }
 
 async function resolveParams(method, params) {
@@ -229,7 +211,16 @@ export default class Api {
     return this._methods
   }
 
-  addApiMethod(name, method) {
+  addApiMethod(
+    name,
+    method,
+    {
+      description = method.description,
+      params = method.params,
+      permission = method.permission,
+      resolve = method.resolve,
+    } = {}
+  ) {
     const methods = this._methods
 
     if (name in methods) {
@@ -252,23 +243,25 @@ export default class Api {
         }
       })
 
-      const { params } = method
+      let validate
       if (params !== undefined) {
-        let schema = { type: 'object', properties: cloneDeep(params) }
         try {
-          schema = adaptJsonSchema(schema)
-          method.validate = ajv.compile(schema)
+          validate = compileXoJsonSchema({ type: 'object', properties: cloneDeep(params) })
         } catch (error) {
           log.warn('failed to compile method params schema', {
             error,
             method: name,
-            schema,
           })
           throw error
         }
       }
 
-      methods[name] = method
+      methods[name] = Object.assign(
+        function apiWrapper() {
+          return method.apply(this, arguments)
+        },
+        { description, params, permission, resolve, validate }
+      )
     }
 
     let remove = () => {
@@ -290,6 +283,8 @@ export default class Api {
         removes.push(this.addApiMethod(name, base + method))
       } else if (type === 'function') {
         removes.push(this.addApiMethod(name, method))
+      } else if (Array.isArray(method)) {
+        removes.push(this.addApiMethod(name, ...method))
       } else {
         const oldBase = base
         base = name + '.'
@@ -349,7 +344,7 @@ export default class Api {
       userName,
       userIp: connection.get('user_ip', undefined),
       method: name,
-      params: sensitiveValues.replace(params, '* obfuscated *'),
+      params: Obfuscate.replace(params, '* obfuscated *'),
       timestamp: Date.now(),
     }
 
@@ -391,7 +386,11 @@ export default class Api {
 
       const resolvedParams = await resolveParams.call(app, method, params)
 
-      let result = await method.call(app, resolvedParams)
+      let result = await (name in NO_LOG_METHODS
+        ? method.call(app, resolvedParams)
+        : app.tasks
+            .create({ name: 'API call: ' + name, method: name, params, type: 'api.call' }, { clearLogOnSuccess: true })
+            .run(() => method.call(app, resolvedParams)))
 
       // If nothing was returned, consider this operation a success
       // and return true.
@@ -432,13 +431,7 @@ export default class Api {
         Date.now() - startTime
       )}] =!> ${error}`
 
-      // 2020-07-10: Work-around: many kinds of error can be triggered by
-      // 'pool.listMissingPatches' method, which can generates a lot of logs due to the fact that xo-web
-      // uses 5s active subscriptions to call it.
-      // 2021-02-11: Work-around: ECONNREFUSED error can be triggered by
-      // 'host.stats' method because there is no connection to the host during a
-      // toolstack restart and xo-web may call it often
-      if (name !== 'pool.listMissingPatches' && name !== 'host.stats') {
+      if (!(name in NO_LOG_METHODS)) {
         this._logger.error(message, {
           ...data,
           duration: Date.now() - startTime,

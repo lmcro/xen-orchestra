@@ -7,8 +7,10 @@ import isEmpty from 'lodash/isEmpty.js'
 import iteratee from 'lodash/iteratee.js'
 import mixin from '@xen-orchestra/mixin'
 import mixinLegacy from '@xen-orchestra/mixin/legacy.js'
+import once from 'lodash/once.js'
 import stubTrue from 'lodash/stubTrue.js'
 import SslCertificate from '@xen-orchestra/mixins/SslCertificate.mjs'
+import Tasks from '@xen-orchestra/mixins/Tasks.mjs'
 import { Collection as XoCollection } from 'xo-collection'
 import { createClient as createRedisClient } from 'redis'
 import { createDebounceResource } from '@vates/disposable/debounceResource.js'
@@ -16,6 +18,7 @@ import { createLogger } from '@xen-orchestra/log'
 import { EventEmitter } from 'events'
 import { noSuchObject } from 'xo-common/api-errors.js'
 import { parseDuration } from '@vates/parse-duration'
+import { pipeline } from 'node:stream'
 import { UniqueIndex as XoUniqueIndex } from 'xo-collection/unique-index.js'
 
 import mixins from './xo-mixins/index.mjs'
@@ -30,7 +33,7 @@ export default class Xo extends EventEmitter {
   constructor(opts) {
     super()
 
-    mixin(this, { Config, Hooks, HttpProxy, SslCertificate }, [opts])
+    mixin(this, { Config, Hooks, HttpProxy, SslCertificate, Tasks }, [opts])
     // a lot of mixins adds listener for start/stop/… events
     this.hooks.setMaxListeners(0)
 
@@ -45,6 +48,9 @@ export default class Xo extends EventEmitter {
     {
       const { socket: path, uri: url } = config.redis || {}
       const redis = createRedisClient({ socket: { path }, url })
+      redis.on('error', error => {
+        log.warn('redis error', { error })
+      })
 
       this._redis = redis
       this.hooks.on('start core', () => redis.connect())
@@ -121,16 +127,16 @@ export default class Xo extends EventEmitter {
   // -----------------------------------------------------------------
 
   _handleHttpRequest(req, res, next) {
-    const { url } = req
+    const { path } = req
 
     const { _httpRequestWatchers: watchers } = this
-    const watcher = watchers[url]
+    const watcher = watchers[path]
     if (!watcher) {
       next()
       return
     }
     if (!watcher.persistent) {
-      delete watchers[url]
+      delete watchers[path]
     }
 
     const { fn, data } = watcher
@@ -142,7 +148,7 @@ export default class Xo extends EventEmitter {
           if (typeof result === 'string' || Buffer.isBuffer(result)) {
             res.end(result)
           } else if (typeof result.pipe === 'function') {
-            result.pipe(res)
+            pipeline(result, res, noop)
           } else {
             res.end(JSON.stringify(result))
           }
@@ -166,35 +172,35 @@ export default class Xo extends EventEmitter {
 
   async registerHttpRequest(fn, data, { suffix = '' } = {}) {
     const { _httpRequestWatchers: watchers } = this
-    let url
+    let path
 
     do {
-      url = `/api/${await generateToken()}${suffix}`
-    } while (url in watchers)
+      path = `/api/${await generateToken()}${suffix}`
+    } while (path in watchers)
 
-    watchers[url] = {
+    watchers[path] = {
       data,
       fn,
     }
-    return url
+    return path
   }
 
-  async registerHttpRequestHandler(url, fn, { data = undefined, persistent = true } = {}) {
+  async registerHttpRequestHandler(path, fn, { data = undefined, persistent = true } = {}) {
     const { _httpRequestWatchers: watchers } = this
 
-    if (url in watchers) {
-      throw new Error(`a handler is already registered for ${url}`)
+    if (path in watchers) {
+      throw new Error(`a handler is already registered for ${path}`)
     }
 
-    watchers[url] = {
+    watchers[path] = {
       data,
       fn,
       persistent,
     }
-  }
 
-  async unregisterHttpRequestHandler(url) {
-    delete this._httpRequestWatchers[url]
+    return once(() => {
+      delete this._httpRequestWatchers[path]
+    })
   }
 
   // -----------------------------------------------------------------

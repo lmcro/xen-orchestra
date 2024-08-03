@@ -20,15 +20,15 @@
     "url": "https://vates.fr"
   },
   "license": "ISC",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "engines": {
     "node": ">=8.10"
   },
   "scripts": {
     "postversion": "npm publish --access public",
-    "test": "tap"
+    "test": "node--test"
   },
   "devDependencies": {
-    "tap": "^16.0.1"
+    "test": "^3.2.1"
   }
 }

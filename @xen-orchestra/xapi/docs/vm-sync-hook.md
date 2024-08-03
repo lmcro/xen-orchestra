@@ -18,7 +18,7 @@ The feature is opt-in via a tag on the VM: `xo:notify-on-snapshot`.
 
 By default, it will be an HTTPS request on the port `1727`, on the first IP address reported by the VM.
 
-If the _VM Tools_ (i.e. management agent) are not installed on the VM or if you which to use another URL, you can specify this in the tag: `xo:notify-on-snapshot=<URL>`.
+If the _VM Tools_ (i.e. management agent) are not installed on the VM or if you wish to use another URL, you can specify this in the tag: `xo:notify-on-snapshot=<URL>`.
 
 To guarantee the request comes from XO, a secret must be provided in the `xo-server`'s (and `xo-proxy` if relevant) configuration:
 
@@ -27,11 +27,20 @@ To guarantee the request comes from XO, a secret must be provided in the `xo-ser
 syncHookSecret = 'unique long string to ensure the request comes from XO'
 ```
 
+XO will waits for the request to be answered before starting the snapshot, but will not wait longer than _1 minute_ by default. This timeout can be changed in the configuration as well:
+
+```toml
+[xapiOptions]
+
+# Timeout in milliseconds
+#
+# Default: 60e3
+syncHookTimeout = 300e3 # 5 minutes
+```
+
 ## Specification
 
-XO will waits for the request to be answered before starting the snapshot, but will not wait longer than _1 minute_.
-
-If the request fails for any reason, XO will go ahead with snapshot immediately.
+If the request fails for any reasons (including the timeout described in the above section), XO will go ahead with snapshot immediately.
 
 ```http
 GET /sync HTTP/1.1
@@ -143,7 +152,7 @@ main().catch(console.warn)
 
 You can run it manually for testing:
 
-```
-> node index.cjs
+```console
+$ node index.cjs
 Server is listening on https://[::]:1727
 ```

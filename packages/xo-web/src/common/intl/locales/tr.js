@@ -179,9 +179,6 @@ export default {
   // Original text: "IPs"
   settingsIpsPage: "IP'ler",
 
-  // Original text: "Config"
-  settingsConfigPage: 'Yapılandırma',
-
   // Original text: "About"
   aboutPage: 'Hakkında',
 
@@ -299,7 +296,7 @@ export default {
   // Original text: "Add your XCP-ng hosts or pools"
   homeWelcomeText: 'XenServer sunucu veya havuzunu ekle',
 
-  // Original text: "Some XenServers have been registered but are not connected"
+  // Original text: "Some XCP-ng hosts have been registered but are not connected"
   homeConnectServerText: "Bazı XenServer'lar kayıtlı ama bağlı değil",
 
   // Original text: "Want some help?"
@@ -1993,9 +1990,6 @@ export default {
   // Original text: "Invalid parameters"
   configIpErrorTitle: 'Geçersiz parametre',
 
-  // Original text: "IP address and netmask required"
-  configIpErrorMessage: 'IP adresi ve ağ maskesi gerekli',
-
   // Original text: "Static IP address"
   staticIp: 'Statik IP adresi',
 
@@ -3223,7 +3217,7 @@ export default {
   // Original text: "To SR:"
   vmImportToSr: 'SR:',
 
-  // Original text: "VMs to import"
+  // Original text: "VM{nVms, plural, one {} other {s}} to import"
   vmsToImport: "içe aktarılacak VM'ler",
 
   // Original text: "Reset"
@@ -3244,8 +3238,8 @@ export default {
   // Original text: "Export starting…"
   startVmExport: 'Dışa aktarma başlatılıyor...',
 
-  // Original text: "N CPUs"
-  nCpus: 'N CPU',
+  // Original text: 'Number of CPUs'
+  nCpus: undefined,
 
   // Original text: "Memory"
   vmMemory: 'Bellek',
@@ -4013,12 +4007,6 @@ export default {
 
   // Original text: "Xen Orchestra"
   xenOrchestra: 'Xen Orchestra',
-
-  // Original text: "Xen Orchestra server"
-  xenOrchestraServer: 'Xen Orchestra sunucusu',
-
-  // Original text: "Xen Orchestra web client"
-  xenOrchestraWeb: 'Xen Orchestra web istemcisi',
 
   // Original text: "No pro support provided!"
   noProSupport: 'Hiçbir profesyonel destek verilmez!',

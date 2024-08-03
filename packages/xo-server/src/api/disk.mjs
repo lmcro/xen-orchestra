@@ -1,16 +1,18 @@
 import * as multiparty from 'multiparty'
 import assert from 'assert'
-import getStream from 'get-stream'
+import hrp from 'http-request-plus'
 import { createLogger } from '@xen-orchestra/log'
 import { defer } from 'golike-defer'
 import { format, JsonRpcError } from 'json-rpc-peer'
-import { noSuchObject } from 'xo-common/api-errors.js'
+import { getStreamAsBuffer } from 'get-stream'
+import { invalidParameters, noSuchObject } from 'xo-common/api-errors.js'
 import { pipeline } from 'stream'
 import { peekFooterFromVhdStream } from 'vhd-lib'
 import { vmdkToVhd } from 'xo-vmdk-to-vhd'
 
 import { VDI_FORMAT_VHD, VDI_FORMAT_RAW } from '../xapi/index.mjs'
 import { parseSize } from '../utils.mjs'
+import { readChunk } from '@vates/read-chunk'
 
 const log = createLogger('xo:disk')
 
@@ -85,17 +87,25 @@ create.resolve = {
 const VHD = 'vhd'
 const VMDK = 'vmdk'
 
-async function handleExportContent(req, res, { filename, format, vdi }) {
+async function handleExportContent(req, res, { filename, format, nbdConcurrency, preferNbd, vdi }) {
   const stream =
     format === VMDK
-      ? await vdi.$xapi.exportVdiAsVmdk(vdi.$id, filename)
-      : await vdi.$exportContent({ format: VDI_FORMAT_VHD })
+      ? await vdi.$xapi.exportVdiAsVmdk(vdi.$id, filename, { nbdConcurrency, preferNbd })
+      : await vdi.$exportContent({ format: VDI_FORMAT_VHD, nbdConcurrency, preferNbd })
   req.on('close', () => stream.destroy())
 
-  // Remove the filename as it is already part of the URL.
-  stream.headers['content-disposition'] = 'attachment'
+  // stream can be an HTTP response, in this case, extract interesting data
+  const { headers = {}, length, statusCode = 200, statusMessage = 'OK' } = stream
 
-  res.writeHead(stream.statusCode, stream.statusMessage != null ? stream.statusMessage : '', stream.headers)
+  // Set the correct disposition
+  headers['content-disposition'] = 'attachment'
+
+  // expose the stream length if known
+  if (headers['content-length'] === undefined && length !== undefined) {
+    headers['content-length'] = length
+  }
+
+  res.writeHead(statusCode, statusMessage != null ? statusMessage : '', headers)
   pipeline(stream, res, error => {
     if (error != null) {
       log.warn('disk.exportContent', { error })
@@ -103,7 +113,7 @@ async function handleExportContent(req, res, { filename, format, vdi }) {
   })
 }
 
-export async function exportContent({ vdi, format = VHD }) {
+export async function exportContent({ vdi, format = VHD, nbdConcurrency, preferNbd }) {
   const filename = (vdi.name_label || 'unknown') + '.' + (format === VHD ? 'vhd' : 'vmdk')
   return {
     $getFrom: await this.registerHttpRequest(
@@ -112,6 +122,8 @@ export async function exportContent({ vdi, format = VHD }) {
         vdi: this.getXapiObject(vdi),
         filename,
         format,
+        nbdConcurrency,
+        preferNbd,
       },
       {
         suffix: `/${encodeURIComponent(filename)}`,
@@ -124,6 +136,8 @@ exportContent.description = 'export the content of a VDI'
 exportContent.params = {
   id: { type: 'string' },
   format: { enum: [VMDK, VHD], optional: true },
+  preferNbd: { type: 'boolean', optional: true },
+  nbdConcurrency: { type: 'number', optional: true },
 }
 exportContent.resolve = {
   vdi: ['id', ['VDI', 'VDI-snapshot'], 'view'],
@@ -177,7 +191,7 @@ async function handleImport(req, res, { type, name, description, vmdkData, srId,
         if (part.name !== 'file') {
           promises.push(
             (async () => {
-              const buffer = await getStream.buffer(part)
+              const buffer = await getStreamAsBuffer(part)
               vmdkData[part.name] = new Uint32Array(
                 buffer.buffer,
                 buffer.byteOffset,
@@ -225,6 +239,14 @@ async function handleImport(req, res, { type, name, description, vmdkData, srId,
           )
           try {
             await vdi.$importContent(vhdStream, { format: diskFormat })
+            let buffer
+            const CHUNK_SIZE = 1024 * 1024
+            // drain remaining content ( padding .header)
+            // didn't succeed to ensure the stream is completly consumed with resume/finished
+            do {
+              buffer = await readChunk(part, CHUNK_SIZE)
+            } while (buffer?.length === CHUNK_SIZE)
+
             res.end(format.response(0, vdi.$id))
           } catch (e) {
             await vdi.$destroy()
@@ -244,8 +266,31 @@ async function handleImport(req, res, { type, name, description, vmdkData, srId,
   })
 }
 
-// type is 'vhd' or 'vmdk'
-async function importDisk({ sr, type, name, description, vmdkData }) {
+// type is 'vhd', 'vmdk', 'raw' or 'iso'
+async function importDisk({ sr, type, name, description, url, vmdkData }) {
+  if (url !== undefined) {
+    const isRaw = type === 'raw' || type === 'iso'
+    if (!(isRaw || type === 'vhd')) {
+      throw invalidParameters('URL import is only compatible with VHD and raw formats')
+    }
+
+    const stream = await hrp(url)
+    const length = stream.headers['content-length']
+    if (length !== undefined) {
+      stream.length = length
+    }
+
+    sr = this.getXapiObject(sr)
+
+    const vdiRef = await sr.$importVdi(stream, {
+      format: isRaw ? VDI_FORMAT_RAW : VDI_FORMAT_VHD,
+      name_label: name,
+      name_description: description,
+    })
+
+    return await sr.$xapi.getField('VDI', vdiRef, 'uuid')
+  }
+
   return {
     $sendTo: await this.registerHttpRequest(handleImport, {
       description,
@@ -261,9 +306,10 @@ async function importDisk({ sr, type, name, description, vmdkData }) {
 export { importDisk as import }
 
 importDisk.params = {
-  description: { type: 'string', optional: true },
+  description: { type: 'string', minLength: 0, optional: true },
   name: { type: 'string' },
   sr: { type: 'string' },
+  url: { type: 'string', optional: true },
   type: { type: 'string' },
   vmdkData: {
     type: 'object',

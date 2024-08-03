@@ -10,7 +10,7 @@ import { Container, Row, Col } from 'grid'
 import { createDoesHostNeedRestart } from 'selectors'
 import { FormattedRelative, FormattedTime } from 'react-intl'
 import { installAllPatchesOnHost, restartHost } from 'xo'
-import { isEmpty } from 'lodash'
+import isEmpty from 'lodash/isEmpty.js'
 
 import { createGetObject } from '../../common/selectors'
 
@@ -163,12 +163,12 @@ class XcpPatches extends Component {
               />
             )}
             <TabButton
-              disabled={!hasMissingPatches || pool.HA_enabled}
+              disabled={!hasMissingPatches || pool?.HA_enabled}
               btnStyle={hasMissingPatches ? 'primary' : undefined}
               handler={installAllPatches}
               icon={hasMissingPatches ? 'host-patch-update' : 'success'}
               labelId={hasMissingPatches ? 'patchUpdateButton' : 'hostUpToDate'}
-              tooltip={pool.HA_enabled ? _('highAvailabilityNotDisabledTooltip') : undefined}
+              tooltip={pool?.HA_enabled ? _('highAvailabilityNotDisabledTooltip') : undefined}
             />
           </Col>
         </Row>

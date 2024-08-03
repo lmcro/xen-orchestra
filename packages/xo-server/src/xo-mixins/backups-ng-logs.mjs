@@ -35,10 +35,6 @@ const computeStatusAndSortTasks = (status, tasks) => {
   return status
 }
 
-function getPropertyValue(key) {
-  return this[key]
-}
-
 const taskTimeComparator = ({ start: s1, end: e1 }, { start: s2, end: e2 }) => {
   if (e1 !== undefined) {
     if (e2 !== undefined) {
@@ -194,9 +190,9 @@ export default {
     let logs = await this.getBackupNgLogs()
 
     // convert to array
-    logs = Object.keys(logs).map(getPropertyValue, logs)
+    logs = Object.values(logs)
 
-    if (!isEmpty(filter)) {
+    if (typeof filter === 'function' || !isEmpty(filter)) {
       logs = logs.filter(iteratee(filter))
     }
 
@@ -213,7 +209,7 @@ export default {
             },
             'start'
           )
-    let j =
+    const j =
       before === undefined
         ? logs.length
         : sortedIndexBy(
@@ -224,11 +220,7 @@ export default {
             'start'
           )
 
-    limit += i
-    if (limit < j) {
-      j = limit
-    }
-    logs = logs.slice(i, j)
+    logs = logs.slice(limit === undefined ? i : Math.max(i, j - limit), j)
 
     return logs
   },
